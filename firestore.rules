@@ -1,0 +1,131 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Master check if a user is a member of a ledger
+    function isLedgerMember(ledgerId) {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/ledgers/$(ledgerId)/members/$(request.auth.uid)) ||
+        get(/databases/$(database)/documents/ledgers/$(ledgerId)).data.createdById == request.auth.uid
+      );
+    }
+
+    // --- Users Collection ---
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'activeLedgerId'])
+      );
+      allow delete: if false;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+             data.keys().size() >= 3 && data.keys().size() <= 6 &&
+             data.uid == request.auth.uid &&
+             data.email is string && data.email.size() <= 200 &&
+             data.createdAt is string &&
+             (!data.keys().hasAny(['displayName']) || (data.displayName is string && data.displayName.size() <= 200)) &&
+             (!data.keys().hasAny(['photoURL']) || (data.photoURL is string && data.photoURL.size() <= 500)) &&
+             (!data.keys().hasAny(['activeLedgerId']) || (data.activeLedgerId is string && data.activeLedgerId.size() <= 128));
+    }
+
+    // --- Ledgers Collection ---
+    match /ledgers/{ledgerId} {
+      allow get: if isSignedIn() && (existing().createdById == request.auth.uid || isLedgerMember(ledgerId));
+      allow list: if isSignedIn() && (resource.data.createdById == request.auth.uid || isLedgerMember(ledgerId));
+      allow create: if isSignedIn() && isValidId(ledgerId) && isValidLedger(incoming());
+      allow update: if isLedgerMember(ledgerId) && isValidLedger(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['name'])
+      );
+      allow delete: if isSignedIn() && existing().createdById == request.auth.uid;
+    }
+
+    function isValidLedger(data) {
+      return data.keys().hasAll(['id', 'name', 'createdById', 'createdAt']) &&
+             data.keys().size() <= 5 &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.createdById == request.auth.uid &&
+             data.createdAt is string &&
+             (!data.keys().hasAny(['createdByEmail']) || (data.createdByEmail is string && data.createdByEmail.size() <= 200));
+    }
+
+    // --- Ledger Members Collection ---
+    match /ledgers/{ledgerId}/members/{userId} {
+      allow get: if isSignedIn() && (isLedgerMember(ledgerId) || get(/databases/$(database)/documents/ledgers/$(ledgerId)).data.createdById == request.auth.uid);
+      allow list: if isSignedIn() && (isLedgerMember(ledgerId) || get(/databases/$(database)/documents/ledgers/$(ledgerId)).data.createdById == request.auth.uid);
+      // Anyone signed in can add themselves as a member if they have access to join
+      allow create: if isSignedIn() && userId == request.auth.uid && isValidLedgerMember(incoming()) && exists(/databases/$(database)/documents/ledgers/$(ledgerId));
+      allow update: if isSignedIn() && isLedgerMember(ledgerId) && (
+        // Only owner can update roles
+        get(/databases/$(database)/documents/ledgers/$(ledgerId)).data.createdById == request.auth.uid &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['role'])
+      );
+      allow delete: if isSignedIn() && (
+        // User can remove themselves, or owner can remove staff
+        userId == request.auth.uid || get(/databases/$(database)/documents/ledgers/$(ledgerId)).data.createdById == request.auth.uid
+      );
+    }
+
+    function isValidLedgerMember(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'joinedAt']) &&
+             data.keys().size() <= 5 &&
+             data.uid == request.auth.uid &&
+             data.email is string && data.email.size() <= 200 &&
+             (data.role == 'owner' || data.role == 'staff') &&
+             data.joinedAt is string &&
+             (!data.keys().hasAny(['displayName']) || (data.displayName is string && data.displayName.size() <= 200));
+    }
+
+    // --- Ledger Transactions Collection ---
+    match /ledgers/{ledgerId}/transactions/{transactionId} {
+      allow get, list: if isLedgerMember(ledgerId);
+      allow create: if isLedgerMember(ledgerId) && isValidId(transactionId) && isValidTransaction(incoming()) && incoming().createdById == request.auth.uid;
+      allow update: if isLedgerMember(ledgerId) && isValidTransaction(incoming()) && incoming().createdById == existing().createdById;
+      allow delete: if isLedgerMember(ledgerId); // Ledger members can delete if needed
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['id', 'type', 'amount', 'paymentMethod', 'createdById', 'createdAt']) &&
+             data.keys().size() <= 12 &&
+             data.id is string && data.id.size() <= 128 &&
+             (data.type == 'JAMA' || data.type == 'UDHAR') &&
+             (data.amount is int || data.amount is float) && data.amount >= 0 &&
+             (data.paymentMethod == 'CASH' || data.paymentMethod == 'UPI' || data.paymentMethod == 'KHATA') &&
+             data.createdById is string &&
+             data.createdAt is string &&
+             (!data.keys().hasAny(['remarks']) || (data.remarks is string && data.remarks.size() <= 500)) &&
+             (!data.keys().hasAny(['category']) || (data.category is string && data.category.size() <= 100)) &&
+             (!data.keys().hasAny(['notes']) || (data.notes is string && data.notes.size() <= 2000)) &&
+             (!data.keys().hasAny(['createdByEmail']) || (data.createdByEmail is string && data.createdByEmail.size() <= 200)) &&
+             (!data.keys().hasAny(['createdByDisplayName']) || (data.createdByDisplayName is string && data.createdByDisplayName.size() <= 200));
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user profile storing metadata and current active workspace",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "activeLedgerId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "Ledger": {
+      "title": "Ledger",
+      "description": "A specific Rojmel ledger workspace configured by a business owner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "createdById": { "type": "string" },
+        "createdByEmail": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "createdById", "createdAt"]
+    },
+    "LedgerMember": {
+      "title": "LedgerMember",
+      "description": "A mapping indicating business owners or staff permissions for a shared workspace",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "staff"] },
+        "joinedAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "role", "joinedAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A single financial ledger transaction entry (Jama/Udhar)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["JAMA", "UDHAR"] },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["CASH", "UPI", "KHATA"] },
+        "remarks": { "type": "string" },
+        "category": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdById": { "type": "string" },
+        "createdByEmail": { "type": "string" },
+        "createdByDisplayName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "type", "amount", "paymentMethod", "createdById", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Store individual user active settings and profile"
+    },
+    "/ledgers/{ledgerId}": {
+      "schema": "Ledger",
+      "description": "Core business ledger registries"
+    },
+    "/ledgers/{ledgerId}/members/{userId}": {
+      "schema": "LedgerMember",
+      "description": "Authorized staff and owners of a given shared ledger"
+    },
+    "/ledgers/{ledgerId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Chronological list of all dual-column transactions in a given ledger"
+    }
+  }
+}

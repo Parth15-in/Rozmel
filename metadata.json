@@ -1,0 +1,8 @@
+{
+  "name": "Rojmel Ledger",
+  "description": "Indian Rojmel (Daily Transaction Ledger) with lightning-fast single-handed entry, multiplayer staff sharing, and offline integration support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
