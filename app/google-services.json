@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "829040354623",
+    "project_id": "rozmel-2000f",
+    "storage_bucket": "rozmel-2000f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:829040354623:android:df7598bd78e86821089f8a",
+        "android_client_info": {
+          "package_name": "com.parth.rozmel"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "829040354623-q0gr5o7qtejt4dv0vc6qf933n34l5a8h.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAUDoq2sVXD8JmJSE_qIbBRV7TXggb0qIw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "829040354623-q0gr5o7qtejt4dv0vc6qf933n34l5a8h.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
