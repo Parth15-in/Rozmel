@@ -1,18 +1,56 @@
 {
   "name": "Ledger Book (Rojmel)",
-  "short_name": "Ledger Book",
+  "short_name": "Rojmel",
   "description": "Offline-first Business Ledger Tracker / JAMA and UDHAR Book",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#faf9f6",
   "theme_color": "#10b981",
   "orientation": "portrait-primary",
+  "prefer_related_applications": false,
+  "categories": ["business", "productivity"],
+  "screenshots": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
   "icons": [
     {
-      "src": "icon.svg",
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Entry",
+      "short_name": "Quick Entry",
+      "description": "Create a quick transaction entry",
+      "url": "/?action=quick-entry",
+      "icons": [
+        {
+          "src": "/icon.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }

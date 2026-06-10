@@ -59,6 +59,26 @@ export default function App() {
     }
   }, []);
 
+  // Initialize fullscreen & native app feel
+  useEffect(() => {
+    // Request fullscreen on app start
+    const requestFullscreen = async () => {
+      try {
+        if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+          await document.documentElement.requestFullscreen().catch(() => {
+            // Silently fail if not allowed - user can still use the app
+          });
+        }
+      } catch (err) {
+        // Ignore fullscreen errors
+      }
+    };
+
+    // Try fullscreen after a short delay to ensure DOM is ready
+    const timer = setTimeout(requestFullscreen, 500);
+    return () => clearTimeout(timer);
+  }, []);
+
   // 1. Initial State: Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {

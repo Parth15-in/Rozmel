@@ -206,7 +206,7 @@ export default function StaffConfigModal({
                           </span>
                         )}
                         {/* Edit & Delete Buttons */}
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                        <div className="flex gap-1 transition">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
