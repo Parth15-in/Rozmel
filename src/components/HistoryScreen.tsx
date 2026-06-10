@@ -18,7 +18,21 @@ import {
   FolderOpen,
   ArrowUpDown,
   BookOpen,
-  AlertCircle
+  AlertCircle,
+  Folder,
+  IndianRupee,
+  Smartphone,
+  ClipboardList,
+  ShoppingBag,
+  ShoppingCart,
+  Home,
+  Users,
+  Zap,
+  Car,
+  Coffee,
+  Wrench,
+  MessageSquare,
+  Package,
 } from 'lucide-react';
 import { LedgerTransaction } from '../types';
 
@@ -55,20 +69,24 @@ const getFirstEmoji = (str: string): string | null => {
 };
 
 // Helper to resolve custom emojis
-const getCategoryEmoji = (category?: string, type?: 'JAMA' | 'UDHAR') => {
-  if (!category) return type === 'JAMA' ? '💼' : '📦';
+const getCategoryIcon = (category?: string, type?: 'JAMA' | 'UDHAR') => {
+  const iconClass = 'w-3.5 h-3.5';
+  if (!category) {
+    return type === 'JAMA' ? <BookOpen className={iconClass} /> : <Package className={iconClass} />;
+  }
   const emoji = getFirstEmoji(category);
-  if (emoji) return emoji;
-
-  const val = category.toLowerCase();
-  if (val.includes('sale') || val.includes('विक्री')) return '🛍️';
-  if (val.includes('payment') || val.includes('पेमेंट')) return '💸';
-  if (val.includes('interest') || val.includes('व्याज')) return '📈';
-  if (val.includes('rent') || val.includes('भाडे')) return '🏢';
-  if (val.includes('salary') || val.includes('पगार')) return '👷';
-  if (val.includes('purchase') || val.includes('खरेदी')) return '🛒';
-  
-  return type === 'JAMA' ? '💼' : '📦';
+  const normalized = (emoji ? category.slice(emoji.length).trim() : category).toLowerCase();
+  if (normalized.includes('sale') || normalized.includes('विक्री')) return <ShoppingBag className={iconClass} />;
+  if (normalized.includes('payment') || normalized.includes('पेमेंट')) return <IndianRupee className={iconClass} />;
+  if (normalized.includes('interest') || normalized.includes('व्याज')) return <TrendingUp className={iconClass} />;
+  if (normalized.includes('rent') || normalized.includes('भाडे')) return <Home className={iconClass} />;
+  if (normalized.includes('salary') || normalized.includes('पगार')) return <Users className={iconClass} />;
+  if (normalized.includes('purchase') || normalized.includes('खरेदी')) return <ShoppingCart className={iconClass} />;
+  if (normalized.includes('bill') || normalized.includes('बिले')) return <Zap className={iconClass} />;
+  if (normalized.includes('travel') || normalized.includes('प्रवास')) return <Car className={iconClass} />;
+  if (normalized.includes('snack') || normalized.includes('नाश्ता')) return <Coffee className={iconClass} />;
+  if (normalized.includes('repair') || normalized.includes('दुरुस्ती')) return <Wrench className={iconClass} />;
+  return type === 'JAMA' ? <BookOpen className={iconClass} /> : <Package className={iconClass} />;
 };
 
 // Helper to remove emoji from name
@@ -377,7 +395,15 @@ export default function HistoryScreen({
                     : 'bg-white text-slate-500 border-gray-200 hover:bg-gray-50'
                 }`}
               >
-                {method === 'ALL' ? 'All Modes' : method === 'CASH' ? 'CASH 💵' : method === 'UPI' ? 'UPI 📱' : 'KHATA 📖'}
+                {method === 'ALL' ? (
+                  'All Modes'
+                ) : method === 'CASH' ? (
+                  <span className="inline-flex items-center gap-1"><IndianRupee className="w-3.5 h-3.5" /> CASH</span>
+                ) : method === 'UPI' ? (
+                  <span className="inline-flex items-center gap-1"><Smartphone className="w-3.5 h-3.5" /> UPI</span>
+                ) : (
+                  <span className="inline-flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" /> KHATA</span>
+                )}
               </button>
             ))}
           </div>
@@ -418,7 +444,11 @@ export default function HistoryScreen({
                         : 'bg-white text-slate-500 border-gray-200 hover:bg-gray-50'
                     }`}
                   >
-                    {isAll ? '📁 All' : `${getCategoryEmoji(catName)} ${displayLabel}`}
+                    {isAll ? (
+                      <span className="inline-flex items-center gap-1"><FolderOpen className="w-3.5 h-3.5" /> All</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1">{getCategoryIcon(catName)}<span>{displayLabel}</span></span>
+                    )}
                   </button>
                 );
               })}
@@ -488,7 +518,7 @@ export default function HistoryScreen({
       <div className="flex-1 overflow-y-auto no-scrollbar">
         {filteredTransactions.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-center space-y-3.5 h-full">
-            <span className="text-5xl">📖</span>
+            <BookOpen className="w-12 h-12 text-slate-300" />
             <h3 className="text-sm font-black text-slate-700">No Historical Logs Found</h3>
             <p className="text-xs text-slate-400 max-w-[240px] leading-relaxed">
               No daily rojmel log entries matches your active filters/presets. Adjust filters or register a new transaction.
@@ -529,18 +559,18 @@ export default function HistoryScreen({
 
                       {t.notes && (
                         <p className="text-[10px] text-gray-500 italic mt-1 bg-[#faf9f6]/95 p-1.5 rounded-lg border border-gray-150 break-words max-w-[280px]">
-                          📝 {t.notes}
+                          <span className="inline-flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" />{t.notes}</span>
                         </p>
                       )}
                       
                       {/* Secondary meta flags */}
                       <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-gray-100 border border-gray-180 text-slate-500">
-                          {t.paymentMethod === 'CASH' ? '💵 CASH' : t.paymentMethod === 'UPI' ? '📱 UPI' : '📖 KHATA'}
+                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-gray-100 border border-gray-180 text-slate-500 inline-flex items-center gap-1">
+                          {t.paymentMethod === 'CASH' ? <><IndianRupee className="w-3.5 h-3.5" /> CASH</> : t.paymentMethod === 'UPI' ? <><Smartphone className="w-3.5 h-3.5" /> UPI</> : <><BookOpen className="w-3.5 h-3.5" /> KHATA</>}
                         </span>
                         
                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 border border-slate-205 text-slate-600 flex items-center gap-1 max-w-[150px] truncate">
-                          {getCategoryEmoji(t.category, t.type)} {cleanCategoryName(t.category)}
+                          {getCategoryIcon(t.category, t.type)} {cleanCategoryName(t.category)}
                         </span>
                       </div>
 
@@ -552,7 +582,7 @@ export default function HistoryScreen({
                         {t.createdByDisplayName && t.createdByEmail !== userEmail && (
                           <>
                             <span>•</span>
-                            <span className="text-emerald-600">✍️ {t.createdByDisplayName}</span>
+                            <span className="inline-flex items-center gap-1 text-emerald-600"><Pencil className="w-3.5 h-3.5" />{t.createdByDisplayName}</span>
                           </>
                         )}
                       </div>
@@ -627,7 +657,7 @@ export default function HistoryScreen({
                         <div>{t.remarks || 'Cash transaction'}</div>
                         {t.notes && (
                           <div className="text-[9.5px] text-slate-500 font-medium italic mt-0.5 bg-[#faf9f6]/95 p-1 rounded border border-gray-150 break-words">
-                            📝 {t.notes}
+                            <span className="inline-flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" />{t.notes}</span>
                           </div>
                         )}
                         {t.createdByDisplayName && t.createdByEmail !== userEmail && (
@@ -635,8 +665,7 @@ export default function HistoryScreen({
                         )}
                       </td>
                       <td className="py-2.5 px-3 font-medium text-slate-500 text-[11px] truncate max-w-[120px]">
-                        <span>{getCategoryEmoji(t.category, t.type)} </span>
-                        <span>{cleanCategoryName(t.category)}</span>
+                        <span className="inline-flex items-center gap-1">{getCategoryIcon(t.category, t.type)}<span>{cleanCategoryName(t.category)}</span></span>
                       </td>
                       <td className="py-2.5 px-2 text-center text-[9px] font-black uppercase text-slate-500 select-none">
                         {t.paymentMethod}

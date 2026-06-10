@@ -261,27 +261,29 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
 
+    const ownerMember: LedgerMember = {
+      uid: user.uid,
+      email: user.email || '',
+      displayName: user.displayName || '',
+      role: 'owner',
+      joinedAt: new Date().toISOString(),
+    };
+
     try {
-      // 1. Write the ledger document
-      await setDoc(doc(db, 'ledgers', ledgerId), newLedger);
-
-      // 2. Register owner row inside members subcollection
-      const ownerMember: LedgerMember = {
-        uid: user.uid,
-        email: user.email || '',
-        displayName: user.displayName || '',
-        role: 'owner',
-        joinedAt: new Date().toISOString(),
-      };
-      await setDoc(doc(db, 'ledgers', ledgerId, 'members', user.uid), ownerMember);
-
-      // 3. Update User Profile Selection State
-      const userRef = doc(db, 'users', user.uid);
-      await setDoc(userRef, { activeLedgerId: ledgerId }, { merge: true });
-
-      // Re-initialize state
+      // OPTIMISTIC UPDATE: Update UI immediately
       setCurrentLedger(newLedger);
+      setLedgers((prev) => [...prev, newLedger]);
       setProfile((prev) => (prev ? { ...prev, activeLedgerId: ledgerId } : null));
+
+      // BACKGROUND SYNC: Fire Firestore writes without awaiting
+      const userRef = doc(db, 'users', user.uid);
+      Promise.all([
+        setDoc(doc(db, 'ledgers', ledgerId), newLedger),
+        setDoc(doc(db, 'ledgers', ledgerId, 'members', user.uid), ownerMember),
+        setDoc(userRef, { activeLedgerId: ledgerId }, { merge: true }),
+      ]).catch((err: any) => {
+        handleFirestoreError(err, OperationType.WRITE, pathLedger);
+      });
     } catch (err: any) {
       handleFirestoreError(err, OperationType.WRITE, pathLedger);
     }
@@ -291,23 +293,75 @@ export default function App() {
   const handleSelectLedger = async (ledgerId: string) => {
     if (!user) return;
     try {
-      const userRef = doc(db, 'users', user.uid);
-      await setDoc(userRef, { activeLedgerId: ledgerId }, { merge: true });
+      // Find ledger from existing ledgers array (instant, no Firestore call needed)
+      const selectedLedger = ledgers.find((l) => l.id === ledgerId);
+      if (!selectedLedger) return;
 
-      // Refresh states
-      const ledgerRef = doc(db, 'ledgers', ledgerId);
-      const ledgerSnap = await getDoc(ledgerRef);
-      if (ledgerSnap.exists()) {
-        setCurrentLedger(ledgerSnap.data() as LedgerWorkspace);
-      }
+      // OPTIMISTIC UPDATE: Update UI immediately
+      setCurrentLedger(selectedLedger);
       setProfile((prev) => (prev ? { ...prev, activeLedgerId: ledgerId } : null));
-      setShowSettings(false); // Close settings panel
+      setShowSettings(false); // Close settings panel instantly
+
+      // BACKGROUND SYNC: Fire Firestore write without awaiting
+      const userRef = doc(db, 'users', user.uid);
+      setDoc(userRef, { activeLedgerId: ledgerId }, { merge: true }).catch((err) => {
+        console.error('Workspace switch sync error', err);
+      });
     } catch (err) {
       console.error('Workspace switch error', err);
     }
   };
 
-  // 6. Subscriptions to Active Ledger: Transactions Log & Membership Directory
+  // 6. Update an existing ledger name
+  const handleUpdateLedgerName = async (ledgerId: string, newName: string) => {
+    if (!user || !newName.trim()) return;
+    try {
+      const ledgerRef = doc(db, 'ledgers', ledgerId);
+      await setDoc(ledgerRef, { name: newName }, { merge: true });
+      
+      // Update local state
+      setLedgers((prev) =>
+        prev.map((l) => (l.id === ledgerId ? { ...l, name: newName } : l))
+      );
+      
+      // Update current ledger if it's the one being edited
+      if (currentLedger?.id === ledgerId) {
+        setCurrentLedger((prev) => (prev ? { ...prev, name: newName } : null));
+      }
+    } catch (err: any) {
+      handleFirestoreError(err, OperationType.WRITE, `ledgers/${ledgerId}`);
+    }
+  };
+
+  // 7. Delete a ledger and all its data
+  const handleDeleteLedger = async (ledgerId: string) => {
+    if (!user) return;
+    try {
+      // Prevent deletion of the active ledger
+      if (currentLedger?.id === ledgerId) {
+        // Switch to another ledger first
+        const otherLedger = ledgers.find((l) => l.id !== ledgerId);
+        if (otherLedger) {
+          await handleSelectLedger(otherLedger.id);
+        } else {
+          // No other ledger, create a new one
+          await handleCreateLedger('My Business Ledger');
+        }
+      }
+
+      // Delete the ledger document
+      const ledgerRef = doc(db, 'ledgers', ledgerId);
+      await deleteDoc(ledgerRef);
+
+      // Update local state
+      setLedgers((prev) => prev.filter((l) => l.id !== ledgerId));
+    } catch (err: any) {
+      console.error('Delete ledger error:', err);
+      handleFirestoreError(err, OperationType.DELETE, `ledgers/${ledgerId}`);
+    }
+  };
+
+  // 8. Subscriptions to Active Ledger: Transactions Log & Membership Directory
   useEffect(() => {
     if (!currentLedger) return;
 
@@ -503,6 +557,8 @@ export default function App() {
           onClose={() => setShowSettings(false)}
           onCreateLedger={handleCreateLedger}
           onSelectLedger={handleSelectLedger}
+          onUpdateLedgerName={handleUpdateLedgerName}
+          onDeleteLedger={handleDeleteLedger}
         />
       )}
     </div>

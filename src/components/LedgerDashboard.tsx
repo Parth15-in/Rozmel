@@ -16,7 +16,8 @@ import {
   User,
   AlertCircle,
   Pencil,
-  X
+  X,
+  BookOpen,
 } from 'lucide-react';
 
 interface LedgerDashboardProps {
@@ -303,7 +304,7 @@ export default function LedgerDashboard({
           {/* Active Ledger Info */}
           <div className="flex items-center gap-2">
             <span className="p-2 bg-emerald-50 rounded-xl border border-emerald-100 shrink-0">
-              <span className="text-xl">🏪</span>
+              <BookOpen className="w-5 h-5 text-emerald-600" />
             </span>
             <div className="max-w-[160px]">
               <h1 className="text-sm font-extrabold text-gray-900 truncate">

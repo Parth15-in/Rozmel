@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { TransactionType, PaymentMethod, LedgerTransaction } from '../types';
-import { ArrowLeft, Wallet, Smartphone, BookOpen, AlertCircle, Save, Plus, Check, Calendar, ChevronRight, X, Sparkles } from 'lucide-react';
+import { ArrowLeft, Wallet, Smartphone, BookOpen, AlertCircle, Save, Plus, Check, Calendar, ChevronRight, X, Sparkles, IndianRupee, MessageSquare, Tag, ShoppingBag, TrendingUp, Home, Users, Zap, Car, Coffee, Wrench, Package } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface QuickEntryScreenProps {
@@ -40,6 +40,38 @@ const getFirstEmoji = (str: string): string | null => {
     }
   }
   return null;
+};
+
+const cleanCategoryName = (category?: string) => {
+  if (!category) return 'Other';
+  const trimmed = category.trim();
+  const emoji = getFirstEmoji(trimmed);
+  const cleaned = emoji ? trimmed.slice(emoji.length).trim() : trimmed;
+  return cleaned.split(' / ')[0];
+};
+
+const getCategoryIcon = (category?: string) => {
+  const iconClass = 'w-3.5 h-3.5';
+  if (!category) return <Tag className={iconClass} />;
+  const normalized = cleanCategoryName(category).toLowerCase();
+  if (normalized.includes('sale') || normalized.includes('विक्री')) return <ShoppingBag className={iconClass} />;
+  if (normalized.includes('payment') || normalized.includes('पेमेंट') || normalized.includes('commission') || normalized.includes('कमिशन')) return <IndianRupee className={iconClass} />;
+  if (normalized.includes('interest') || normalized.includes('व्याज')) return <TrendingUp className={iconClass} />;
+  if (normalized.includes('rent') || normalized.includes('भाडे')) return <Home className={iconClass} />;
+  if (normalized.includes('salary') || normalized.includes('पगार')) return <Users className={iconClass} />;
+  if (normalized.includes('purchase') || normalized.includes('खरेदी')) return <ShoppingBag className={iconClass} />;
+  if (normalized.includes('bill') || normalized.includes('बिले')) return <Zap className={iconClass} />;
+  if (normalized.includes('travel') || normalized.includes('प्रवास')) return <Car className={iconClass} />;
+  if (normalized.includes('snack') || normalized.includes('tea') || normalized.includes('चहा') || normalized.includes('नाश्ता')) return <Coffee className={iconClass} />;
+  if (normalized.includes('repair') || normalized.includes('maintenance') || normalized.includes('दुरुस्ती')) return <Wrench className={iconClass} />;
+  return <Tag className={iconClass} />;
+};
+
+const getPaymentMethodIcon = (method: PaymentMethod) => {
+  const iconClass = 'w-4 h-4';
+  if (method === 'CASH') return <IndianRupee className={iconClass} />;
+  if (method === 'UPI') return <Smartphone className={iconClass} />;
+  return <BookOpen className={iconClass} />;
 };
 
 const DEFAULT_JAMA_CATEGORIES = [
@@ -443,8 +475,9 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
               {lastSavedDetails.notes && (
                 <div>
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block mb-0.5">Notes / अधिक तपशील</span>
-                  <span className="text-xs font-semibold text-gray-700 bg-gray-50 border border-gray-100 p-2.5 rounded-xl break-words block">
-                    📝 {lastSavedDetails.notes}
+                  <span className="inline-flex items-start gap-2 text-xs font-semibold text-gray-700 bg-gray-50 border border-gray-100 p-2.5 rounded-xl break-words block">
+                    <MessageSquare className="w-3.5 h-3.5 text-slate-500 mt-0.5" />
+                    <span>{lastSavedDetails.notes}</span>
                   </span>
                 </div>
               )}
@@ -452,14 +485,16 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
               <div className="grid grid-cols-2 gap-4 pt-1">
                 <div>
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block mb-0.5">Category / श्रेणी</span>
-                  <span className="text-xs font-bold text-gray-700 block truncate">
-                    {lastSavedDetails.category}
+                  <span className="text-xs font-bold text-gray-700 block truncate inline-flex items-center gap-2">
+                    {getCategoryIcon(lastSavedDetails.category)}
+                    <span>{cleanCategoryName(lastSavedDetails.category)}</span>
                   </span>
                 </div>
                 <div>
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block mb-0.5">Mode / माध्यम</span>
-                  <span className="text-xs font-bold text-gray-700 block uppercase">
-                    {lastSavedDetails.paymentMethod === 'CASH' ? '💵 Cash / रोख' : lastSavedDetails.paymentMethod === 'UPI' ? '📱 UPI / Online' : '📖 Khata / खाते'}
+                  <span className="text-xs font-bold text-gray-700 block uppercase inline-flex items-center gap-2">
+                    {getPaymentMethodIcon(lastSavedDetails.paymentMethod)}
+                    <span>{lastSavedDetails.paymentMethod === 'CASH' ? 'Cash / रोख' : lastSavedDetails.paymentMethod === 'UPI' ? 'UPI / Online' : 'Khata / खाते'}</span>
                   </span>
                 </div>
               </div>
@@ -477,7 +512,7 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
             className={`w-full ${accentColor} text-white py-4 px-6 rounded-2xl flex items-center justify-center gap-3 font-bold text-xs uppercase tracking-wider transition shadow-lg hover:brightness-105 cursor-pointer duration-300 active:scale-[0.98]`}
           >
             <Plus className="w-5 h-5 text-white stroke-[3.5]" />
-            <span>➕ Add another entry / नवीन नोंद करा</span>
+            <span>Add another entry / नवीन नोंद करा</span>
           </button>
 
           <button
@@ -485,7 +520,7 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
             className="w-full bg-gray-50 border border-gray-250 hover:bg-gray-100 text-gray-700 py-3 px-6 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-wider transition duration-300 active:scale-[0.98]"
           >
             <BookOpen className="w-4 h-4 text-gray-500" />
-            <span>📋 GO TO DASHBOARD / मुख्य पान</span>
+            <span>GO TO DASHBOARD / मुख्य पान</span>
           </button>
 
         </div>
@@ -507,7 +542,7 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
           <ArrowLeft className="w-5 h-5 text-gray-700" />
         </button>
         <span className="text-sm font-black text-gray-800 uppercase tracking-wider">
-          {editTransaction ? '✏️ Edit Rojmel Log' : '📝 New Rojmel Log'}
+          {editTransaction ? 'Edit Rojmel Log' : 'New Rojmel Log'}
         </span>
         <div className="w-10"></div>
       </div>
@@ -526,7 +561,7 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
                 : 'text-gray-500 hover:text-gray-800'
             }`}
           >
-            📊 जमा / JAMA (INCOME)
+            <TrendingUp className="w-4 h-4" /> जमा / JAMA (INCOME)
           </button>
           <button
             type="button"
@@ -537,7 +572,7 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
                 : 'text-gray-500 hover:text-gray-800'
             }`}
           >
-            📉 उधार / UDHAR (EXPENSE)
+            <TrendingUp className="w-4 h-4 rotate-180" /> उधार / UDHAR (EXPENSE)
           </button>
         </div>
 
@@ -639,7 +674,7 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
                       : 'bg-gray-50/55 text-gray-600 border-gray-200/60 hover:bg-gray-100/50'
                   }`}
                 >
-                  <span className="text-sm shrink-0">{cat.emoji}</span>
+                  <span className="text-sm shrink-0">{getCategoryIcon(cat.value)}</span>
                   <span className="truncate text-[11px] font-bold">{cat.value.split(' / ')[0]}</span>
                 </button>
               );
@@ -766,7 +801,7 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
                   : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
               }`}
             >
-              <span className="text-base">💵</span>
+              <IndianRupee className="w-4 h-4" />
               <span className="text-[10px]">Cash / रोख</span>
             </button>
             <button
@@ -778,7 +813,7 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
                   : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
               }`}
             >
-              <span className="text-base">📱</span>
+              <Smartphone className="w-4 h-4" />
               <span className="text-[10px]">UPI / Online</span>
             </button>
             <button
@@ -790,7 +825,7 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
                   : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
               }`}
             >
-              <span className="text-base">📖</span>
+              <BookOpen className="w-4 h-4" />
               <span className="text-[10px]">Add to Khata</span>
             </button>
           </div>
@@ -834,7 +869,7 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
             </span>
           </div>
           <div className="text-[9px] font-bold text-slate-500 flex items-center justify-center gap-1 mt-1 bg-slate-100 py-1 px-3.5 rounded-full inline-block mx-auto max-w-max">
-            {parseFloat(amountStr) > 0 ? '✏️ Tap to Change Amount' : '✨ Tap here to set Amount Value / रक्कम भरा'}
+            {parseFloat(amountStr) > 0 ? 'Tap to Change Amount' : 'Tap here to set Amount Value / रक्कम भरा'}
           </div>
         </div>
 

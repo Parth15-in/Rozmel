@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LedgerWorkspace, LedgerMember } from '../types';
-import { X, Copy, Check, Users, Plus, Shield, ArrowRight, BookOpen, AlertCircle } from 'lucide-react';
+import { X, Copy, Check, Users, Plus, Shield, ArrowRight, BookOpen, AlertCircle, Pencil, Trash2 } from 'lucide-react';
 
 interface StaffConfigModalProps {
   currentLedger: LedgerWorkspace | null;
@@ -9,6 +9,8 @@ interface StaffConfigModalProps {
   onClose: () => void;
   onCreateLedger: (name: string) => Promise<void>;
   onSelectLedger: (id: string) => void;
+  onUpdateLedgerName: (id: string, newName: string) => Promise<void>;
+  onDeleteLedger: (id: string) => Promise<void>;
 }
 
 export default function StaffConfigModal({
@@ -18,11 +20,17 @@ export default function StaffConfigModal({
   onClose,
   onCreateLedger,
   onSelectLedger,
+  onUpdateLedgerName,
+  onDeleteLedger,
 }: StaffConfigModalProps) {
   const [newLedgerName, setNewLedgerName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [editingLedgerId, setEditingLedgerId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   // Generate Invite URL
   const generateInviteLink = () => {
@@ -59,20 +67,55 @@ export default function StaffConfigModal({
     }
   };
 
+  const handleEditStart = (ledger: LedgerWorkspace) => {
+    setEditingLedgerId(ledger.id);
+    setEditingName(ledger.name);
+  };
+
+  const handleEditSubmit = async (ledgerId: string) => {
+    if (!editingName.trim() || editingName === ledgers.find((l) => l.id === ledgerId)?.name) {
+      setEditingLedgerId(null);
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      await onUpdateLedgerName(ledgerId, editingName.trim());
+      setEditingLedgerId(null);
+    } catch (err) {
+      console.error('Failed to update ledger name', err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleDeleteClick = async (ledgerId: string) => {
+    if (window.confirm('Are you sure you want to delete this ledger? This action cannot be undone.')) {
+      setIsDeleting(ledgerId);
+      try {
+        await onDeleteLedger(ledgerId);
+      } catch (err) {
+        console.error('Failed to delete ledger', err);
+        setIsDeleting(null);
+      }
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       {/* Modal Card */}
-      <div className="bg-[#faf9f6] w-full max-w-md rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      <div className="bg-[#faf9f6] w-full max-w-lg rounded-[28px] border border-gray-200 shadow-[0_35px_80px_-20px_rgba(15,23,42,0.25)] overflow-hidden flex flex-col max-h-[85vh]">
         
         {/* Header */}
-        <div className="px-6 py-4.5 bg-white border-b border-gray-100 flex items-center justify-between">
+        <div className="px-6 py-4.5 bg-white border-b border-gray-100 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5 text-emerald-600" />
-            <h2 className="text-lg font-bold text-gray-800">Workspace Settings</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Workspace Settings</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 cursor-pointer"
+            className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition"
+            aria-label="Close Workspace Settings"
           >
             <X className="w-5 h-5" />
           </button>
@@ -88,18 +131,19 @@ export default function StaffConfigModal({
               <span>Create New Ledger</span>
             </h3>
             
-            <form onSubmit={handleCreateSubmit} className="flex gap-2">
+            <form onSubmit={handleCreateSubmit} className="flex gap-2 flex-wrap">
               <input
                 type="text"
                 value={newLedgerName}
                 onChange={(e) => setNewLedgerName(e.target.value)}
                 placeholder="e.g., Mahavir Kirana Shop"
-                className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-800 focus:outline-none focus:border-emerald-500"
+                autoFocus
+                className="flex-1 min-w-[220px] bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               />
               <button
                 type="submit"
                 disabled={isCreating || !newLedgerName.trim()}
-                className="bg-emerald-600 text-white rounded-xl px-4 text-xs font-bold hover:bg-emerald-700 disabled:opacity-40 transition cursor-pointer"
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-2xl bg-emerald-600 px-5 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {isCreating ? 'Creating...' : 'Create'}
               </button>
@@ -119,50 +163,104 @@ export default function StaffConfigModal({
             </h3>
             <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
               {ledgers.map((l) => (
-                <button
-                  key={l.id}
-                  onClick={() => onSelectLedger(l.id)}
-                  className={`w-full text-left p-3 rounded-2xl flex items-center justify-between border text-xs transition cursor-pointer ${
-                    currentLedger?.id === l.id
-                      ? 'bg-emerald-50 border-emerald-500 text-emerald-900 font-semibold'
-                      : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <span className="truncate">{l.name}</span>
-                  {currentLedger?.id === l.id && (
-                    <span className="text-[10px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-full">
-                      Active
-                    </span>
+                <div key={l.id} className="group">
+                  {editingLedgerId === l.id ? (
+                    // EDIT MODE
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        autoFocus
+                        className="flex-1 bg-white border border-emerald-500 rounded-2xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                      />
+                      <button
+                        onClick={() => handleEditSubmit(l.id)}
+                        disabled={isUpdating}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-semibold transition disabled:opacity-40"
+                      >
+                        {isUpdating ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => setEditingLedgerId(null)}
+                        className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded-xl text-xs font-semibold transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    // DISPLAY MODE
+                    <button
+                      onClick={() => onSelectLedger(l.id)}
+                      className={`w-full text-left p-3 rounded-2xl flex items-center justify-between border text-xs transition cursor-pointer ${
+                        currentLedger?.id === l.id
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-900 font-semibold'
+                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="truncate flex-1">{l.name}</span>
+                      <div className="flex items-center gap-2">
+                        {currentLedger?.id === l.id && (
+                          <span className="text-[10px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-full">
+                            Active
+                          </span>
+                        )}
+                        {/* Edit & Delete Buttons */}
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditStart(l);
+                            }}
+                            className="p-1.5 hover:bg-blue-100 rounded-lg text-blue-600 transition"
+                            title="Edit name"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteClick(l.id);
+                            }}
+                            disabled={isDeleting === l.id}
+                            className="p-1.5 hover:bg-red-100 rounded-lg text-red-600 transition disabled:opacity-40"
+                            title="Delete ledger"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </button>
                   )}
-                </button>
+                </div>
               ))}
             </div>
           </div>
 
           {/* SECTION 3: SHARE SYNC LINK */}
           {currentLedger && (
-            <div className="bg-emerald-50/50 p-5 rounded-2xl border border-emerald-100/50 space-y-3">
+            <div className="bg-emerald-50/50 p-5 rounded-3xl border border-emerald-100/70 space-y-4">
               <div>
-                <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-xs font-semibold text-emerald-900 uppercase tracking-[0.18em] flex items-center gap-2">
                   <Shield className="w-4 h-4 text-emerald-600" />
-                  <span>Share Ledger Link (Staff/Multiplayer)</span>
+                  <span>Share Ledger Link</span>
                 </h3>
-                <p className="text-[11px] text-emerald-700 mt-1">
-                  Share this link with your staff. When they sign in using Google, they will get access to view and add rojmel transactions in real-time.
+                <p className="text-[12px] text-emerald-700 mt-1 leading-5">
+                  Share this secure invite link with staff. When they sign in, they get access to the current ledger immediately.
                 </p>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <input
                   type="text"
                   readOnly
                   value={inviteLink}
                   onClick={(e) => (e.target as HTMLInputElement).select()}
-                  className="flex-1 bg-white border border-emerald-200/60 rounded-xl px-3 py-2 text-xs text-gray-600 font-mono select-all focus:outline-none"
+                  className="flex-1 min-w-[220px] bg-white border border-emerald-200 rounded-2xl px-4 py-3 text-sm text-slate-700 font-mono select-all focus:outline-none focus:border-emerald-400"
                 />
                 <button
                   onClick={handleCopy}
-                  className="bg-gray-900 text-white rounded-xl px-3 hover:bg-gray-800 transition text-xs font-bold flex items-center justify-center cursor-pointer gap-1"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-slate-800"
                 >
                   {copied ? (
                     <>
