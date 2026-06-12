@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.parth.rozmel",
+      "sha256_cert_fingerprints": [
+        "38:F6:C3:7D:F3:54:5E:F2:C0:E2:65:DE:A0:BD:5C:29:74:5A:C7:99:5B:4C:53:E1:13:23:1C:CC:A6:9E:A0:52"
+      ]
+    }
+  }
+]
