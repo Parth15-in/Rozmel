@@ -354,7 +354,10 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
     setIsSavedSuccessfully(false);
     setLastSavedDetails(null);
     setIsKeypadOpen(false);
+    // No auto-close timer to clear; keep modal open until user action
   };
+
+  // No auto-close effect: keep success screen visible until user taps Add another entry or Close
 
   const isUdhar = type === 'UDHAR';
   const accentColor = isUdhar ? 'bg-rose-600' : 'bg-emerald-600';
@@ -376,6 +379,8 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
   }, [transactions, type]);
 
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  
 
   const filteredSuggestions = useMemo(() => {
     if (!remarks.trim()) {

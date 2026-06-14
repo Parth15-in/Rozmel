@@ -473,9 +473,16 @@ export default function App() {
     };
 
     try {
-      // Write to Firestore db (resolves instantly to local cache)
-      await setDoc(doc(db, 'ledgers', currentLedger.id, 'transactions', txId), transactionDoc);
+      // OPTIMISTIC UI: update local transactions immediately so the user sees instant feedback
+      setTransactions((prev) => [transactionDoc, ...prev.filter((t) => t.id !== txId)]);
       setEditingTransaction(null);
+
+      // BACKGROUND SYNC: write to Firestore without awaiting to avoid blocking the UI
+      setDoc(doc(db, 'ledgers', currentLedger.id, 'transactions', txId), transactionDoc)
+        .catch((err) => {
+          // Report and handle Firestore write errors asynchronously
+          handleFirestoreError(err, OperationType.WRITE, pathTx);
+        });
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, pathTx);
       throw err;
