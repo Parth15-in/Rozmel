@@ -33,6 +33,10 @@ import {
   Wrench,
   MessageSquare,
   Package,
+  Maximize2,
+  Minimize2,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { LedgerTransaction } from '../types';
 
@@ -115,10 +119,15 @@ export default function HistoryScreen({
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<ViewMode>('LIST');
   const [isSortedDesc, setIsSortedDesc] = useState<boolean>(true);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState<boolean>(false);
 
   // Custom date ranges
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+
+  // Date search in category section
+  const [dateSearchText, setDateSearchText] = useState('');
 
   // Delete Confirmation overlay states
   const [txToDelete, setTxToDelete] = useState<LedgerTransaction | null>(null);
@@ -137,6 +146,15 @@ export default function HistoryScreen({
     return ['ALL', ...Array.from(set)];
   }, [transactions]);
 
+  // Helper: format date as DD/MM/YYYY
+  const formatDateIndian = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
   // Compute filtered logs
   const filteredTransactions = useMemo(() => {
     const today = new Date();
@@ -152,15 +170,17 @@ export default function HistoryScreen({
     monthAgo.setDate(today.getDate() - 30);
 
     return transactions.filter((t) => {
-      // 1. Search keyword
+      // 1. Search keyword (supports remarks, category, notes, amount, method, and DD/MM/YYYY date)
       const searchLower = searchText.trim().toLowerCase();
+      const txDateFormattedStr = formatDateIndian(t.createdAt).toLowerCase();
       const matchSearch =
         searchLower === '' ||
         (t.remarks || '').toLowerCase().includes(searchLower) ||
         (t.category || '').toLowerCase().includes(searchLower) ||
         (t.notes || '').toLowerCase().includes(searchLower) ||
         t.amount.toString().includes(searchLower) ||
-        (t.paymentMethod || '').toLowerCase().includes(searchLower);
+        (t.paymentMethod || '').toLowerCase().includes(searchLower) ||
+        txDateFormattedStr.includes(searchLower);
 
       // 2. Type Filter
       const matchType = selectedType === 'ALL' || t.type === selectedType;
@@ -171,7 +191,12 @@ export default function HistoryScreen({
       // 4. Category Filter
       const matchCategory = selectedCategory === 'ALL' || t.category === selectedCategory;
 
-      // 5. Date filter
+      // 5. Date search filter (DD/MM/YYYY text match)
+      const dateSearchLower = dateSearchText.trim().toLowerCase();
+      const txDateStr = formatDateIndian(t.createdAt).toLowerCase();
+      const matchDateSearch = dateSearchLower === '' || txDateStr.includes(dateSearchLower);
+
+      // 6. Date preset filter
       let matchDate = true;
       const txDate = new Date(t.createdAt);
 
@@ -198,7 +223,7 @@ export default function HistoryScreen({
         }
       }
 
-      return matchSearch && matchType && matchMethod && matchCategory && matchDate;
+      return matchSearch && matchType && matchMethod && matchCategory && matchDate && matchDateSearch;
     }).sort((a, b) => {
       const timeA = new Date(a.createdAt).getTime();
       const timeB = new Date(b.createdAt).getTime();
@@ -213,7 +238,8 @@ export default function HistoryScreen({
     selectedPreset,
     customStartDate,
     customEndDate,
-    isSortedDesc
+    isSortedDesc,
+    dateSearchText
   ]);
 
   // Compute stats for filtered logs
@@ -235,15 +261,15 @@ export default function HistoryScreen({
     };
   }, [filteredTransactions]);
 
-  // Date formatter for lists
+  // Date formatter for lists - DD/MM/YYYY Indian style
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
-    return d.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      weekday: 'short'
-    });
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const weekday = weekdays[d.getDay()];
+    return `${weekday}, ${dd}/${mm}/${yyyy}`;
   };
 
   const formatTime = (dateStr: string) => {
@@ -263,6 +289,7 @@ export default function HistoryScreen({
     setSelectedCategory('ALL');
     setCustomStartDate('');
     setCustomEndDate('');
+    setDateSearchText('');
   };
 
   const handlePrint = () => {
@@ -270,10 +297,16 @@ export default function HistoryScreen({
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-[#faf9f6] h-full font-sans">
+    <div className={`flex flex-col overflow-hidden bg-[#faf9f6] font-sans transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-[200] h-screen' : 'flex-1 h-full'}`}>
       
-      {/* FILTER STICKY TOP CONTROLLER */}
-      <div className="bg-white border-b border-gray-150 p-4 space-y-3 shrink-0 shadow-xs">
+      {/* FILTER STICKY TOP CONTROLLER - Collapsible with ^ toggle */}
+      {!isFiltersCollapsed && (
+        <motion.div 
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="bg-white border-b border-gray-150 p-3 sm:p-4 space-y-2.5 shrink-0 shadow-xs"
+        >
         
         {/* Search Bar + Sort/View Mode Toggles */}
         <div className="flex items-center gap-2">
@@ -426,65 +459,107 @@ export default function HistoryScreen({
           </div>
         </div>
 
-        {/* Category Carousel filter */}
+        {/* Category Carousel filter + Date Search */}
         {categoriesList.length > 1 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 border-t border-gray-50 pt-2">
-            <span className="text-[8px] font-black uppercase text-slate-400 shrink-0">Folder / श्रेणी:</span>
-            <div className="flex gap-1 overflow-x-auto no-scrollbar">
-              {categoriesList.map((catName) => {
-                const isAll = catName === 'ALL';
-                const displayLabel = isAll ? 'All Categories' : cleanCategoryName(catName);
-                return (
-                  <button
-                    key={catName}
-                    onClick={() => setSelectedCategory(catName)}
-                    className={`px-2 py-1 text-[9px] font-black rounded-lg border transition shrink-0 cursor-pointer ${
-                      selectedCategory === catName
-                        ? 'bg-emerald-600' + ' text-white border-emerald-600'
-                        : 'bg-white text-slate-500 border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    {isAll ? (
-                      <span className="inline-flex items-center gap-1"><FolderOpen className="w-3.5 h-3.5" /> All</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1">{getCategoryIcon(catName)}<span>{displayLabel}</span></span>
-                    )}
-                  </button>
-                );
-              })}
+          <div className="space-y-2 border-t border-gray-50 pt-2">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+              <span className="text-[8px] font-black uppercase text-slate-400 shrink-0">Folder / श्रेणी:</span>
+              <div className="flex gap-1 overflow-x-auto no-scrollbar">
+                {categoriesList.map((catName) => {
+                  const isAll = catName === 'ALL';
+                  const displayLabel = isAll ? 'All Categories' : cleanCategoryName(catName);
+                  return (
+                    <button
+                      key={catName}
+                      onClick={() => setSelectedCategory(catName)}
+                      className={`px-2 py-1 text-[9px] font-black rounded-lg border transition shrink-0 cursor-pointer ${
+                        selectedCategory === catName
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-white text-slate-500 border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      {isAll ? (
+                        <span className="inline-flex items-center gap-1"><FolderOpen className="w-3.5 h-3.5" /> All</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1">{getCategoryIcon(catName)}<span>{displayLabel}</span></span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {/* Date search row */}
+            <div className="relative">
+              <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+              <input
+                type="text"
+                placeholder="Search by date DD/MM/YYYY..."
+                value={dateSearchText}
+                onChange={(e) => setDateSearchText(e.target.value)}
+                className="w-full bg-slate-50 border border-gray-200 rounded-xl py-1.5 pl-8 pr-7 text-[10px] text-slate-700 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition"
+                id="history-date-search-input"
+              />
+              {dateSearchText && (
+                <button
+                  onClick={() => setDateSearchText('')}
+                  className="absolute right-2 top-1.5 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
         )}
 
-      </div>
+        </motion.div>
+      )}
 
-      {/* FILTER ACTIVE COUNTER & EXPORT ACTION ROW */}
-      <div className="px-4 py-2.5 bg-slate-100 flex items-center justify-between border-b border-gray-150 text-[10px]">
-        <div className="flex items-center gap-1.5 text-slate-500 font-bold">
+      {/* FILTER ACTIVE COUNTER & EXPORT ACTION ROW WITH PULL-UP ^ TOGGLE */}
+      <div className="px-3.5 py-2 bg-slate-100 flex items-center justify-between border-b border-gray-150 text-[10px] shrink-0">
+        <div className="flex items-center gap-1.5 text-slate-600 font-bold truncate">
           <Filter className="text-emerald-600 w-3.5 h-3.5 shrink-0" />
-          <span>Found {filteredTransactions.length} transaction entries</span>
+          <span className="truncate">Found {filteredTransactions.length} transaction entries</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* Print preview */}
           {filteredTransactions.length > 0 && (
             <button
               onClick={() => setShowPrintModal(true)}
-              className="bg-emerald-50 text-emerald-800 border border-emerald-200 font-black rounded-lg py-1 px-2 uppercase hover:bg-emerald-100 cursor-pointer flex items-center gap-1"
+              className="bg-emerald-50 text-emerald-800 border border-emerald-200 font-black rounded-lg py-1 px-1.5 uppercase hover:bg-emerald-100 cursor-pointer flex items-center gap-1 text-[9px]"
             >
               <Printer className="w-3 h-3 text-emerald-600" />
-              <span>Statement / प्रिंट</span>
+              <span className="hidden sm:inline">Statement / प्रिंट</span>
+              <span className="sm:hidden">Print</span>
             </button>
           )}
 
           {/* Reset Filters */}
-          {(searchText !== '' || selectedPreset !== 'ALL' || selectedType !== 'ALL' || selectedMethod !== 'ALL' || selectedCategory !== 'ALL') && (
+          {(searchText !== '' || selectedPreset !== 'ALL' || selectedType !== 'ALL' || selectedMethod !== 'ALL' || selectedCategory !== 'ALL' || dateSearchText !== '') && (
             <button
               onClick={clearAllFilters}
-              className="text-rose-600 hover:text-rose-800 uppercase font-black tracking-tight cursor-pointer"
+              className="text-rose-600 hover:text-rose-800 uppercase font-black tracking-tight cursor-pointer text-[9px] px-1"
             >
-              Reset Filters (रीसेट)
+              Reset
             </button>
           )}
+
+          {/* ^ Fullscreen Pull-Up Toggle Button (Icon Only) */}
+          <button
+            onClick={() => setIsFiltersCollapsed(!isFiltersCollapsed)}
+            title={isFiltersCollapsed ? "Show Filters" : "Fullscreen Mode (^)"}
+            className={`p-1.5 rounded-lg font-black transition cursor-pointer border shadow-xs flex items-center justify-center shrink-0 ${
+              isFiltersCollapsed 
+                ? 'bg-emerald-600 text-white border-emerald-600' 
+                : 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800'
+            }`}
+            id="pullup-bigscreen-btn"
+          >
+            {isFiltersCollapsed ? (
+              <ChevronDown className="w-4 h-4 text-white" />
+            ) : (
+              <ChevronUp className="w-4 h-4 text-white" />
+            )}
+          </button>
         </div>
       </div>
 
@@ -732,7 +807,7 @@ export default function HistoryScreen({
                 <h1 className="text-xl font-bold tracking-tight uppercase text-slate-990">Business Rojmel Register</h1>
                 <p className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wide">Historical Balance Statement / खाते स्टेटमेंट</p>
                 <div className="text-[9px] text-slate-400 font-bold">
-                  Generated On: {new Date().toLocaleDateString('en-IN', { hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'long', year: 'numeric' })}
+                  Generated On: {(() => { const now = new Date(); const dd = String(now.getDate()).padStart(2,'0'); const mm = String(now.getMonth()+1).padStart(2,'0'); const yyyy = now.getFullYear(); const hh = String(now.getHours()).padStart(2,'0'); const min = String(now.getMinutes()).padStart(2,'0'); return `${dd}/${mm}/${yyyy} ${hh}:${min}`; })()}
                 </div>
               </div>
 
@@ -786,7 +861,7 @@ export default function HistoryScreen({
                       return (
                         <tr key={t.id} className="align-top">
                           <td className="py-2 font-mono text-slate-500 text-[8px]">
-                            {new Date(t.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                            {(() => { const d = new Date(t.createdAt); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`; })()}
                           </td>
                           <td className="py-2 pr-2">
                             <span className="font-bold text-slate-800 block text-[9.5px]">{t.remarks || 'Cash/Direct Rojmel Log'}</span>

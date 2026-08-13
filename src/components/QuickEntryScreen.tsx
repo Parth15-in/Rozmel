@@ -1,7 +1,18 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { TransactionType, PaymentMethod, LedgerTransaction } from '../types';
-import { ArrowLeft, Wallet, Smartphone, BookOpen, AlertCircle, Save, Plus, Check, Calendar, ChevronRight, X, Sparkles, IndianRupee, MessageSquare, Tag, ShoppingBag, TrendingUp, Home, Users, Zap, Car, Coffee, Wrench, Package } from 'lucide-react';
+import { ArrowLeft, Wallet, Smartphone, BookOpen, AlertCircle, Save, Plus, Check, Calendar, ChevronRight, X, Sparkles, IndianRupee, MessageSquare, Tag, ShoppingBag, TrendingUp, Home, Users, Zap, Car, Coffee, Wrench, Package, Trash2, Layers, ListPlus, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+interface BulkEntryRow {
+  id: string;
+  type: TransactionType;
+  amountStr: string;
+  category: string;
+  otherText?: string;
+  remarks: string;
+  paymentMethod: PaymentMethod;
+  notes?: string;
+}
 
 interface QuickEntryScreenProps {
   onSave: (
@@ -115,7 +126,37 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // States to handle successful saves and adding multiple entries
+  // Entry Mode state: Single vs Bulk Entry
+  const [entryMode, setEntryMode] = useState<'SINGLE' | 'BULK'>('SINGLE');
+
+  // Helper to create empty bulk row
+  const createEmptyBulkRow = (type: TransactionType = 'JAMA'): BulkEntryRow => ({
+    id: Math.random().toString(36).substring(2, 9),
+    type,
+    amountStr: '',
+    category: type === 'JAMA' ? 'Sales / विक्री' : 'Purchase / खरेदी',
+    remarks: '',
+    paymentMethod: 'CASH',
+    notes: '',
+  });
+
+  // Bulk Entry Rows State
+  const [bulkRows, setBulkRows] = useState<BulkEntryRow[]>(() => [
+    createEmptyBulkRow('JAMA'),
+    createEmptyBulkRow('UDHAR'),
+    createEmptyBulkRow('JAMA'),
+  ]);
+
+  // Bulk Save Success Receipt State
+  const [isBulkSavedSuccessfully, setIsBulkSavedSuccessfully] = useState<boolean>(false);
+  const [bulkSavedReceipt, setBulkSavedReceipt] = useState<{
+    totalCount: number;
+    totalJama: number;
+    totalUdhar: number;
+    rows: BulkEntryRow[];
+  } | null>(null);
+
+  // Single Save Success State
   const [isSavedSuccessfully, setIsSavedSuccessfully] = useState<boolean>(false);
   const [lastSavedDetails, setLastSavedDetails] = useState<{
     type: TransactionType;
@@ -123,8 +164,18 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
     remarks: string;
     category: string;
     paymentMethod: PaymentMethod;
-    notes?: string;
+    notes: string;
   } | null>(null);
+
+  // Handler to reset and add another single entry
+  const handleAddNewEntry = () => {
+    setIsSavedSuccessfully(false);
+    setLastSavedDetails(null);
+    setAmountStr('0');
+    setRemarks('');
+    setNotes('');
+    setValidationError(null);
+  };
 
   // Keypad Drawer activation state
   const [isKeypadOpen, setIsKeypadOpen] = useState<boolean>(false);
@@ -342,19 +393,104 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
     }
   };
 
-  const handleAddNewEntry = () => {
-    // Reset inputs for a brand new transaction to prevent "getting stuck on old data"
-    setAmountStr('0');
-    setRemarks('');
-    setNotes('');
-    // Reset category to the first default category of the active list
-    const defaults = type === 'JAMA' ? jamaCategories : udharCategories;
-    setCategory(defaults[0]?.value || 'Other / इतर');
+  // Handlers for Bulk Entry Mode
+  const handleUpdateBulkRow = (id: string, field: keyof BulkEntryRow, value: any) => {
+    setBulkRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
+        const updated = { ...row, [field]: value };
+        // Reset category if type changed
+        if (field === 'type') {
+          updated.category = value === 'JAMA' ? 'Sales / विक्री' : 'Purchase / खरेदी';
+        }
+        return updated;
+      })
+    );
+  };
+
+  const handleAddBulkRow = (type: TransactionType = 'JAMA') => {
+    setBulkRows((prev) => [...prev, createEmptyBulkRow(type)]);
+  };
+
+  const handleRemoveBulkRow = (id: string) => {
+    if (bulkRows.length <= 1) return;
+    setBulkRows((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  // Submit bulk entries
+  const handleBulkSaveSubmit = async () => {
+    const validRows = bulkRows.filter((r) => {
+      const amt = parseFloat(r.amountStr);
+      return !isNaN(amt) && amt > 0;
+    });
+
+    if (validRows.length === 0) {
+      setValidationError('Please enter an amount greater than 0 for at least one entry row.');
+      return;
+    }
+
+    setIsSaving(true);
     setValidationError(null);
-    setIsSavedSuccessfully(false);
-    setLastSavedDetails(null);
-    setIsKeypadOpen(false);
-    // No auto-close timer to clear; keep modal open until user action
+
+    try {
+      let jamaSum = 0;
+      let udharSum = 0;
+      const savedRows: BulkEntryRow[] = [];
+
+      const dateObj = new Date(customDate);
+      const now = new Date();
+      dateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+      const finalCreatedAt = dateObj.toISOString();
+
+      for (const r of validRows) {
+        const amt = parseFloat(r.amountStr);
+        if (r.type === 'JAMA') jamaSum += amt;
+        else udharSum += amt;
+
+        const categoryList = r.type === 'JAMA' ? jamaCategories : udharCategories;
+        // If "Other" was selected, use the custom specified text instead
+        const effectiveCategory = r.category === 'Other / इतर' && r.otherText?.trim()
+          ? r.otherText.trim()
+          : r.category;
+        const activeObj = categoryList.find((c) => c.value === effectiveCategory);
+        const dbCategory = activeObj ? `${activeObj.emoji} ${activeObj.value}` : effectiveCategory;
+
+        await onSave({
+          type: r.type,
+          amount: amt,
+          paymentMethod: r.paymentMethod,
+          remarks: r.remarks.trim() || (r.type === 'JAMA' ? 'Sales / Income' : 'Expense Entry'),
+          category: dbCategory,
+          createdAt: finalCreatedAt,
+          notes: (r.notes || '').trim(),
+        });
+
+        savedRows.push({ ...r, amountStr: amt.toString() });
+      }
+
+      setBulkSavedReceipt({
+        totalCount: validRows.length,
+        totalJama: jamaSum,
+        totalUdhar: udharSum,
+        rows: savedRows,
+      });
+      setIsBulkSavedSuccessfully(true);
+    } catch (err: any) {
+      setValidationError(err?.message || 'Error occurred while saving bulk entries.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleResetBulk = () => {
+    setBulkRows([
+      createEmptyBulkRow('JAMA'),
+      createEmptyBulkRow('UDHAR'),
+      createEmptyBulkRow('JAMA'),
+    ]);
+    setIsBulkSavedSuccessfully(false);
+    setBulkSavedReceipt(null);
+    setValidationError(null);
   };
 
   // No auto-close effect: keep success screen visible until user taps Add another entry or Close
@@ -391,6 +527,115 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
       item.toLowerCase().includes(query)
     ).slice(0, 10);
   }, [savedPartiesAndItems, remarks]);
+
+  if (isBulkSavedSuccessfully && bulkSavedReceipt) {
+    const netSum = bulkSavedReceipt.totalJama - bulkSavedReceipt.totalUdhar;
+    return (
+      <div className="fixed inset-0 z-50 bg-[#faf9f6]/95 backdrop-blur-md flex flex-col justify-between max-w-md mx-auto h-screen shadow-2xl overflow-hidden font-sans">
+        
+        {/* HEADER */}
+        <div className="px-4 py-3 bg-white border-b border-gray-100 flex items-center justify-between shadow-xs sticky top-0 z-20">
+          <div className="w-10"></div>
+          <span className="text-sm font-black text-gray-800 uppercase tracking-wider">
+            🎉 BULK LOGS SAVED
+          </span>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 transition cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Success Content */}
+        <div className="flex-1 flex flex-col items-center justify-start px-5 text-center space-y-4 overflow-y-auto no-scrollbar py-6">
+          
+          {/* Animated Success Badge */}
+          <motion.div 
+            initial={{ scale: 0.3, opacity: 0 }}
+            animate={{ scale: [0.3, 1.1, 1], opacity: 1 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+            className="w-16 h-16 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center shadow-lg relative shrink-0"
+          >
+            <CheckCircle2 className="w-9 h-9 text-emerald-600 stroke-[2.5]" />
+          </motion.div>
+
+          <div className="space-y-1">
+            <h2 className="text-base font-black text-gray-950 uppercase tracking-wide">
+              {bulkSavedReceipt.totalCount} Bulk Entries Saved!
+            </h2>
+            <p className="text-xs text-slate-500 font-bold">
+              {bulkSavedReceipt.totalCount} व्यवहार यशस्वीरित्या जतन केले गेले आहेत 🎉
+            </p>
+          </div>
+
+          {/* Summary Scorecard */}
+          <div className="w-full grid grid-cols-3 gap-2 py-3 border-y border-gray-200/80 text-center">
+            <div className="bg-emerald-50/70 border border-emerald-100 p-2 rounded-xl">
+              <span className="text-[8px] font-black uppercase text-emerald-700 block">Total Jama (+)</span>
+              <span className="text-xs font-black font-mono text-emerald-700">₹{bulkSavedReceipt.totalJama.toLocaleString('en-IN')}</span>
+            </div>
+            <div className="bg-rose-50/70 border border-rose-100 p-2 rounded-xl">
+              <span className="text-[8px] font-black uppercase text-rose-700 block">Total Udhar (-)</span>
+              <span className="text-xs font-black font-mono text-rose-700">₹{bulkSavedReceipt.totalUdhar.toLocaleString('en-IN')}</span>
+            </div>
+            <div className="bg-slate-900 text-white p-2 rounded-xl border border-slate-950">
+              <span className="text-[8px] font-black uppercase text-slate-400 block">Net Sum</span>
+              <span className={`text-xs font-black font-mono ${netSum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>₹{netSum.toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+
+          {/* Saved Items Table */}
+          <div className="w-full bg-white border border-gray-150 rounded-2xl p-3 shadow-xs space-y-2 text-left">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block border-b border-gray-100 pb-1.5">
+              Saved Entries List ({bulkSavedReceipt.rows.length})
+            </span>
+            <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto pr-1 space-y-2">
+              {bulkSavedReceipt.rows.map((row, idx) => {
+                const isUd = row.type === 'UDHAR';
+                return (
+                  <div key={idx} className="pt-2 first:pt-0 flex items-center justify-between text-xs font-semibold gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-1.5 py-0.5 text-[8px] font-black uppercase rounded ${isUd ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                          {isUd ? 'UDHAR' : 'JAMA'}
+                        </span>
+                        <span className="font-bold text-gray-800 truncate">{row.remarks || (isUd ? 'Expense' : 'Income')}</span>
+                      </div>
+                      <span className="text-[9px] text-gray-400 block mt-0.5 truncate">{cleanCategoryName(row.category)} • {row.paymentMethod}</span>
+                    </div>
+                    <span className={`font-mono font-black shrink-0 ${isUd ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {isUd ? '-' : '+'}₹{parseFloat(row.amountStr).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+        </div>
+
+        {/* Footer Actions */}
+        <div className="bg-white border-t border-gray-100 p-4 space-y-2.5 sticky bottom-0 z-20 shadow-lg">
+          <button
+            onClick={handleResetBulk}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-wider transition shadow-lg cursor-pointer"
+          >
+            <ListPlus className="w-4 h-4 text-white" />
+            <span>Add More Bulk Entries / आणखी नोंदी करा</span>
+          </button>
+          <button
+            onClick={onClose}
+            className="w-full bg-gray-50 border border-gray-250 hover:bg-gray-100 text-gray-700 py-3 px-6 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-wider transition cursor-pointer"
+          >
+            <BookOpen className="w-4 h-4 text-gray-500" />
+            <span>Go to Dashboard / मुख्य पान</span>
+          </button>
+        </div>
+
+      </div>
+    );
+  }
 
   if (isSavedSuccessfully && lastSavedDetails) {
     const isSavedUdhar = lastSavedDetails.type === 'UDHAR';
@@ -552,8 +797,232 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
         <div className="w-10"></div>
       </div>
 
-      {/* COMPACT DETAILED FORM (FILL OUT DETAILS BEFORE AMOUNT) */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
+      {/* ENTRY MODE SWITCHER (SINGLE VS BULK) */}
+      {!editTransaction && (
+        <div className="px-4 pt-3">
+          <div className="flex bg-gray-200/60 p-1 rounded-2xl border border-gray-200 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setEntryMode('SINGLE')}
+              className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                entryMode === 'SINGLE'
+                  ? 'bg-slate-900 text-white shadow-md'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              <Save className="w-3.5 h-3.5" /> Single Entry
+            </button>
+            <button
+              type="button"
+              onClick={() => setEntryMode('BULK')}
+              className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                entryMode === 'BULK'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" /> Bulk Entries (अनेक नोंदी)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* FORM BODY */}
+      {entryMode === 'BULK' && !editTransaction ? (
+        /* BULK ENTRY MULTI-ROW FORM */
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-28">
+          
+          {/* Validation Error Display */}
+          {validationError && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-xl flex items-center gap-2.5 text-xs font-bold animate-pulse">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+              <span>{validationError}</span>
+            </div>
+          )}
+
+          {/* Common Date Selector */}
+          <div className="bg-white border border-gray-150 rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-2">
+            <div>
+              <label className="text-[9px] font-black uppercase text-gray-400 block">Bulk Log Date / तारीख</label>
+              <span className="text-xs font-bold text-gray-800">सर्व नोंदींसाठी दिनांक</span>
+            </div>
+            <input
+              type="date"
+              value={customDate}
+              onChange={(e) => setCustomDate(e.target.value)}
+              className="bg-slate-50 border border-gray-250 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
+            />
+          </div>
+
+          {/* Bulk Rows List */}
+          <div className="space-y-3.5">
+            {bulkRows.map((row, index) => {
+              const isRowUdhar = row.type === 'UDHAR';
+              const rowCategories = isRowUdhar ? udharCategories : jamaCategories;
+              return (
+                <div 
+                  key={row.id} 
+                  className={`bg-white border rounded-3xl p-4 shadow-sm space-y-3 transition ${
+                    parseFloat(row.amountStr) > 0 
+                      ? isRowUdhar ? 'border-rose-200 bg-rose-50/10' : 'border-emerald-200 bg-emerald-50/10'
+                      : 'border-gray-150'
+                  }`}
+                >
+                  {/* Row Header & Type Switcher */}
+                  <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      Entry #{index + 1}
+                    </span>
+                    
+                    <div className="flex items-center gap-2">
+                      {/* Type Switcher */}
+                      <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateBulkRow(row.id, 'type', 'JAMA')}
+                          className={`px-2 py-0.5 text-[9px] font-black rounded uppercase transition ${
+                            !isRowUdhar ? 'bg-emerald-600 text-white shadow-xs' : 'text-gray-400'
+                          }`}
+                        >
+                          + Jama
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateBulkRow(row.id, 'type', 'UDHAR')}
+                          className={`px-2 py-0.5 text-[9px] font-black rounded uppercase transition ${
+                            isRowUdhar ? 'bg-rose-600 text-white shadow-xs' : 'text-gray-400'
+                          }`}
+                        >
+                          - Udhar
+                        </button>
+                      </div>
+
+                      {/* Delete Row Button */}
+                      {bulkRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBulkRow(row.id)}
+                          className="p-1 text-gray-300 hover:text-rose-600 rounded transition"
+                          title="Remove Row"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Inputs Grid */}
+                  <div className="space-y-2.5">
+                    {/* Amount & Remarks Grid */}
+                    <div className="grid grid-cols-12 gap-2">
+                      <div className="col-span-5">
+                        <label className="text-[8px] font-black uppercase text-gray-400 block mb-1">Amount (₹) *</label>
+                        <input
+                          type="number"
+                          placeholder="0"
+                          value={row.amountStr}
+                          onChange={(e) => handleUpdateBulkRow(row.id, 'amountStr', e.target.value)}
+                          className="w-full bg-slate-50 border border-gray-200 rounded-xl p-2 text-xs font-black font-mono text-gray-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                        />
+                      </div>
+                      <div className="col-span-7">
+                        <label className="text-[8px] font-black uppercase text-gray-400 block mb-1">Remarks / Party Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Cash sale, Repairs..."
+                          value={row.remarks}
+                          onChange={(e) => handleUpdateBulkRow(row.id, 'remarks', e.target.value)}
+                          className="w-full bg-slate-50 border border-gray-200 rounded-xl p-2 text-xs font-bold text-gray-800 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Category & Payment Method Row */}
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div className="space-y-1.5">
+                        <label className="text-[8px] font-black uppercase text-gray-400 block">Category</label>
+                        <select
+                          value={row.category}
+                          onChange={(e) => {
+                            handleUpdateBulkRow(row.id, 'category', e.target.value);
+                            if (e.target.value !== 'Other / इतर') {
+                              handleUpdateBulkRow(row.id, 'otherText', '');
+                            }
+                          }}
+                          className="w-full bg-slate-50 border border-gray-200 rounded-xl p-1.5 text-[10px] font-bold text-gray-700 focus:outline-none focus:border-emerald-600"
+                        >
+                          {rowCategories.map((c) => (
+                            <option key={c.value} value={c.value}>
+                              {c.emoji} {cleanCategoryName(c.value)}
+                            </option>
+                          ))}
+                        </select>
+                        {row.category === 'Other / इतर' && (
+                          <input
+                            type="text"
+                            autoFocus
+                            placeholder="Please specify... (e.g. Milk, Diesel)"
+                            value={row.otherText || ''}
+                            onChange={(e) => handleUpdateBulkRow(row.id, 'otherText', e.target.value)}
+                            className={`w-full bg-amber-50 border rounded-xl p-1.5 text-[10px] font-bold text-gray-800 placeholder-amber-400 focus:outline-none focus:border-amber-500 transition ${
+                              !row.otherText?.trim() ? 'border-amber-300 animate-pulse' : 'border-amber-400'
+                            }`}
+                          />
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-[8px] font-black uppercase text-gray-400 block mb-1">Payment Mode</label>
+                        <div className="flex bg-gray-100 p-0.5 rounded-xl border border-gray-200">
+                          {(['CASH', 'UPI', 'KHATA'] as const).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => handleUpdateBulkRow(row.id, 'paymentMethod', m)}
+                              className={`flex-1 py-1 text-[8px] font-extrabold uppercase rounded-lg transition ${
+                                row.paymentMethod === m
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'text-gray-500'
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Quick Add Row Buttons */}
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => handleAddBulkRow('JAMA')}
+              className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 py-3 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-emerald-600" />
+              <span>+ Add Jama Entry (+ जमा)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddBulkRow('UDHAR')}
+              className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 py-3 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-rose-600" />
+              <span>+ Add Udhar Entry (- खर्च)</span>
+            </button>
+          </div>
+
+        </div>
+      ) : (
+        /* SINGLE ENTRY FORM */
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
         
         {/* BINARY TOGGLE (JAMA / UDHAR) */}
         <div className="grid grid-cols-2 p-1 bg-gray-150/70 rounded-2xl border border-gray-200/50 shadow-inner">
@@ -598,98 +1067,93 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
             <button
               type="button"
               onClick={() => setIsAddingCategory(true)}
-              className="text-[10px] font-extrabold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100 hover:bg-emerald-100 transition flex items-center gap-1 cursor-pointer"
+              className="text-[10px] font-black text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-full flex items-center gap-1 transition cursor-pointer"
             >
-              <Plus className="w-3 h-3" /> Add Custom / नवीन बनवा
+              <Plus className="w-3 h-3" />
+              <span>Add Custom / नवीन बनवा</span>
             </button>
           </div>
 
-          <AnimatePresence>
-            {isAddingCategory && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="bg-gray-50 border border-emerald-250 p-3 rounded-2xl space-y-2.5 overflow-hidden"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wide flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-500" /> Create Custom Category
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingCategory(false)}
-                    className="text-gray-400 hover:text-gray-600 h-5 w-5 flex items-center justify-center rounded-full hover:bg-gray-200"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newCatName}
-                    onChange={(e) => setNewCatName(e.target.value)}
-                    placeholder="e.g. Tea & Snacks / चहा-नाश्ता"
-                    className="flex-1 bg-white border border-gray-200 rounded-xl py-2 px-3 text-xs font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddCustomCategory}
-                    disabled={!newCatName.trim()}
-                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold text-xs py-2 px-3.5 rounded-xl transition flex items-center gap-1 shrink-0"
-                  >
-                    Save
-                  </button>
-                </div>
-                {/* Emoji List */}
-                <div className="space-y-1">
-                  <span className="text-[9px] font-bold text-gray-400">Select Symbol / चिन्ह निवडा:</span>
-                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1 pt-0.5">
-                    {POPULAR_EMOJIS.map((emoji) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => setNewCatEmoji(emoji)}
-                        className={`text-sm p-1.5 rounded-lg border shrink-0 transition cursor-pointer ${
-                          newCatEmoji === emoji
-                            ? 'bg-emerald-100 border-emerald-400 font-bold scale-110'
-                            : 'bg-white border-gray-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* INLINE ADD CATEGORY DIALOG */}
+          {isAddingCategory && (
+            <motion.div
+              initial={{ opacity: 0, y: -5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-slate-50 border border-slate-200 p-3 rounded-2xl space-y-2"
+            >
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-black uppercase text-slate-500">New Category / नवीन श्रेणी श्रेणी</span>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingCategory(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
 
-          <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 no-scrollbar">
-            {activeCategories.map((cat) => {
-              const isSelected = category === cat.value;
+              {/* Emoji Picker Row */}
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
+                {POPULAR_EMOJIS.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => setNewCatEmoji(e)}
+                    className={`p-1.5 rounded-lg text-sm transition shrink-0 ${
+                      newCatEmoji === e ? 'bg-emerald-200 ring-2 ring-emerald-500 scale-110' : 'hover:bg-gray-200'
+                    }`}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Category Name (e.g. Milk, Diesel...)"
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  className="flex-1 bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs font-bold text-gray-800 focus:outline-none focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCustomCategory}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer"
+                >
+                  Save / जतन करा
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* CATEGORY GRID PILLS */}
+          <div className="grid grid-cols-2 gap-2">
+            {activeCategories.map((c) => {
+              const cleanName = cleanCategoryName(c.value);
+              const isSelected = category === c.value || category === cleanName;
               return (
                 <button
-                  key={cat.value}
+                  key={c.value}
                   type="button"
-                  onClick={() => setCategory(cat.value)}
-                  className={`py-2 rounded-xl px-3 font-bold text-xs border tracking-tight transition duration-150 flex items-center gap-2 cursor-pointer text-left min-w-0 ${
+                  onClick={() => setCategory(c.value)}
+                  className={`p-3 rounded-2xl font-bold text-xs transition duration-200 flex items-center justify-start gap-2.5 cursor-pointer border text-left ${
                     isSelected
-                      ? `${badgeBg} border-emerald-500 text-emerald-950 font-black ring-2 ring-emerald-500/10`
-                      : 'bg-gray-50/55 text-gray-600 border-gray-200/60 hover:bg-gray-100/50'
+                      ? `${badgeBg} font-black border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm`
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
                   }`}
                 >
-                  <span className="text-sm shrink-0">{getCategoryIcon(cat.value)}</span>
-                  <span className="truncate text-[11px] font-bold">{cat.value.split(' / ')[0]}</span>
+                  <span className="text-base shrink-0">{c.emoji}</span>
+                  <span className="truncate">{cleanName}</span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* 2. PARTY NAME / REMARKS WITH AUTOCOMPLETE */}
-        <div className="relative">
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">
+        {/* 2. REMARKS / PARTY NAME WITH AUTOCOMPLETE */}
+        <div className="bg-white border border-gray-150 rounded-3xl p-4 shadow-sm space-y-3">
+          <label className="block text-xs font-black text-gray-400 uppercase tracking-widest">
             Remarks / Party Name / तपशील (नाव किंवा साहित्य)
           </label>
           <div className="relative">
@@ -697,77 +1161,30 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
               type="text"
               id="transaction-remarks-input"
               value={remarks}
-              onFocus={() => setShowSuggestions(true)}
               onChange={(e) => {
                 setRemarks(e.target.value);
                 setShowSuggestions(true);
               }}
-              placeholder={isUdhar ? "e.g., Vilas Ghadashi, Sunil Patil, Repairs..." : "e.g., Cash Sale, Advance, Commission..."}
-              className={`w-full bg-white border border-gray-200 rounded-2xl py-3.5 px-4 text-xs font-bold text-gray-800 placeholder-gray-400 focus:outline-none focus:border-gray-350 transition ${ringColor}`}
+              onFocus={() => setShowSuggestions(true)}
+              placeholder="e.g., Vilas Ghadashi, Sunil Patil, Repairs..."
+              className={`w-full bg-white border border-gray-200 rounded-2xl py-3 px-4 text-xs font-bold text-gray-800 placeholder-gray-400 focus:outline-none focus:border-gray-300 ring-offset-2 focus:ring-1 ${ringColor}`}
             />
-            {remarks && (
-              <button
-                type="button"
-                onClick={() => {
-                  setRemarks('');
-                  setShowSuggestions(true);
-                }}
-                className="absolute right-3.5 top-3 text-xs text-gray-400 hover:text-gray-600 bg-gray-100 p-1 rounded-full w-5 h-5 flex items-center justify-center font-bold transition cursor-pointer"
-              >
-                ✕
-              </button>
-            )}
           </div>
 
-          {/* Autocomplete Suggestions */}
-          {showSuggestions && filteredSuggestions.length > 0 && (
-            <div className="absolute left-0 right-0 z-30 mt-1 bg-white border border-gray-150 rounded-2xl shadow-xl max-h-48 overflow-y-auto divide-y divide-gray-100">
-              <div className="p-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between sticky top-0 z-10">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">
-                  Saved list / जतन केलेली नावे
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowSuggestions(false)}
-                  className="text-[10px] text-emerald-600 font-extrabold hover:underline px-2"
-                >
-                  Close
-                </button>
-              </div>
-              {filteredSuggestions.map((item, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => {
-                    setRemarks(item);
-                    setShowSuggestions(false);
-                  }}
-                  className="w-full text-left px-4 py-3 text-xs text-gray-700 hover:bg-emerald-50 active:bg-emerald-100 font-bold transition cursor-pointer flex justify-between items-center"
-                >
-                  <span>{item}</span>
-                  <span className="text-[9px] bg-slate-100 text-gray-500 px-1.5 py-0.5 rounded font-mono font-bold uppercase animate-pulse">Select</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Popular pills suggestion list */}
-          {savedPartiesAndItems.length > 0 && (
-            <div className="mt-2 text-left">
-              <div className="flex flex-wrap gap-1.5 max-h-16 overflow-y-auto pb-1 pl-0.5">
-                {savedPartiesAndItems.slice(0, 5).map((item, idx) => (
+          {/* Party Suggestions chips */}
+          {filteredSuggestions.length > 0 && showSuggestions && (
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[8px] font-black uppercase text-gray-400 block">Recent Parties / पूर्वीचे व्यवहार:</span>
+              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto no-scrollbar">
+                {filteredSuggestions.map((item) => (
                   <button
-                    key={idx}
+                    key={item}
                     type="button"
                     onClick={() => {
                       setRemarks(item);
                       setShowSuggestions(false);
                     }}
-                    className={`text-[9px] font-black px-2.5 py-1.5 rounded-lg border transition cursor-pointer ${
-                      remarks === item
-                        ? 'bg-slate-800 text-white border-slate-800'
-                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                    }`}
+                    className="text-[9px] font-black px-2.5 py-1.5 rounded-lg border bg-white text-gray-600 border-gray-200 hover:bg-gray-50 transition cursor-pointer"
                   >
                     {item}
                   </button>
@@ -775,81 +1192,6 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
               </div>
             </div>
           )}
-        </div>
-
-        {/* 2b. ADDITIONAL NOTES (OPTIONAL) */}
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">
-            Additional Notes (Optional) / अधिक तपशील
-          </label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="e.g., specific items, payment balance notes, details etc..."
-            rows={2}
-            className={`w-full bg-white border border-gray-200 rounded-2xl py-3 px-4 text-xs font-bold text-gray-800 placeholder-gray-450 focus:outline-none focus:border-gray-350 transition resize-none ${ringColor}`}
-          />
-        </div>
-
-        {/* 3. PAYMENT METHOD */}
-        <div>
-          <label className="block text-xs font-bold text-gray-450 uppercase tracking-widest mb-2">
-            Payment Mode / व्यवहाराचे माध्यम
-          </label>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => setPaymentMethod('CASH')}
-              className={`py-3 text-xs rounded-2xl font-bold border transition duration-150 flex flex-col items-center gap-1 cursor-pointer ${
-                paymentMethod === 'CASH'
-                  ? `${badgeBg} border-emerald-500 ring-2 ring-emerald-500/20`
-                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              <IndianRupee className="w-4 h-4" />
-              <span className="text-[10px]">Cash / रोख</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPaymentMethod('UPI')}
-              className={`py-3 text-xs rounded-2xl font-bold border transition duration-150 flex flex-col items-center gap-1 cursor-pointer ${
-                paymentMethod === 'UPI'
-                  ? `${badgeBg} border-emerald-500 ring-2 ring-emerald-500/20`
-                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              <Smartphone className="w-4 h-4" />
-              <span className="text-[10px]">UPI / Online</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPaymentMethod('KHATA')}
-              className={`py-3 text-xs rounded-2xl font-bold border transition duration-150 flex flex-col items-center gap-1 cursor-pointer ${
-                paymentMethod === 'KHATA'
-                  ? `${badgeBg} border-emerald-500 ring-2 ring-emerald-500/20`
-                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              <span className="text-[10px]">Add to Khata</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 4. MANUAL DATE */}
-        <div>
-          <label className="block text-xs font-bold text-gray-450 uppercase tracking-widest mb-2">
-            Date / तारीख (दिनांक)
-          </label>
-          <div className="relative">
-            <input
-              type="date"
-              id="transaction-date-input"
-              value={customDate}
-              onChange={(e) => setCustomDate(e.target.value)}
-              className={`w-full bg-white border border-gray-200 rounded-2xl py-3 px-4 text-xs font-bold text-gray-800 focus:outline-none focus:border-gray-300 ring-offset-2 focus:ring-1 ${ringColor}`}
-            />
-          </div>
         </div>
 
         {/* 5. INTERACTIVE AMOUNT INPUT BOX (TRIGGER) */}
@@ -878,31 +1220,64 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
           </div>
         </div>
 
-      </div>
+        </div>
+      )}
 
-      {/* FOOTER ACTIONS - IF KEYPAD HIDDEN, SHOW DEFAULT SAVE BUTTON */}
-      {!isKeypadOpen && (
-        <div className="bg-white border-t border-gray-100 p-4 sticky bottom-0 z-20 shadow-lg">
+      {/* FOOTER ACTIONS */}
+      {entryMode === 'BULK' && !editTransaction ? (
+        /* BULK FOOTER CTA */
+        <div className="bg-white border-t border-gray-100 p-4 sticky bottom-0 z-20 shadow-lg space-y-2">
+          {/* Live Summary Bar */}
+          <div className="flex items-center justify-between text-[10px] font-bold text-gray-500 bg-slate-50 p-2 rounded-xl border border-gray-200">
+            <span>Valid Entries: {bulkRows.filter(r => parseFloat(r.amountStr) > 0).length}</span>
+            <div className="flex gap-2">
+              <span className="text-emerald-700">Jama: ₹{bulkRows.filter(r => r.type === 'JAMA').reduce((s, r) => s + (parseFloat(r.amountStr) || 0), 0).toLocaleString('en-IN')}</span>
+              <span className="text-rose-700">Udhar: ₹{bulkRows.filter(r => r.type === 'UDHAR').reduce((s, r) => s + (parseFloat(r.amountStr) || 0), 0).toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+
           <button
-            onClick={handleSaveSubmit}
-            id="save-entry-btn"
-            disabled={isSaving}
-            className={`w-full ${accentColor} text-white py-4 px-6 rounded-2xl flex items-center justify-center gap-3.5 font-bold text-sm tracking-wide transition shadow-lg shadow-black/5 disabled:opacity-40 cursor-pointer duration-300 active:scale-[0.98] hover:brightness-105`}
+            onClick={handleBulkSaveSubmit}
+            disabled={isSaving || bulkRows.filter(r => parseFloat(r.amountStr) > 0).length === 0}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 px-6 rounded-2xl flex items-center justify-center gap-2.5 font-black text-xs uppercase tracking-wider transition shadow-lg disabled:opacity-40 cursor-pointer"
           >
             {isSaving ? (
               <span className="inline-block w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></span>
             ) : (
-              <Save className="w-4 h-4" />
+              <Layers className="w-4 h-4 text-white" />
             )}
             <span>
               {isSaving
-                ? 'Saving Rojmel Entry...'
-                : editTransaction
-                ? 'Update Log Entry / बदल जतन करा'
-                : `Save ${type} Log Entry / जमा-खर्च जतन करा`}
+                ? 'Saving Bulk Entries...'
+                : `Save All ${bulkRows.filter(r => parseFloat(r.amountStr) > 0).length} Entries / सर्व नोंदी जतन करा`}
             </span>
           </button>
         </div>
+      ) : (
+        /* SINGLE FOOTER CTA */
+        !isKeypadOpen && (
+          <div className="bg-white border-t border-gray-100 p-4 sticky bottom-0 z-20 shadow-lg space-y-2">
+            <button
+              onClick={handleSaveSubmit}
+              id="save-entry-btn"
+              disabled={isSaving}
+              className={`w-full ${accentColor} text-white py-4 px-6 rounded-2xl flex items-center justify-center gap-3.5 font-bold text-sm tracking-wide transition shadow-lg shadow-black/5 disabled:opacity-40 cursor-pointer duration-300 active:scale-[0.98] hover:brightness-105`}
+            >
+              {isSaving ? (
+                <span className="inline-block w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></span>
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              <span>
+                {isSaving
+                  ? 'Saving Rojmel Entry...'
+                  : editTransaction
+                  ? 'Update Log Entry / बदल जतन करा'
+                  : `Save ${type} Log Entry / जमा-खर्च जतन करा`}
+              </span>
+            </button>
+          </div>
+        )
       )}
 
       {/* KEYPAD SLIDE-UP DRAWER */}

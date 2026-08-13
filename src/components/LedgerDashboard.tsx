@@ -18,6 +18,10 @@ import {
   Pencil,
   X,
   BookOpen,
+  Maximize2,
+  Minimize2,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 
 interface LedgerDashboardProps {
@@ -103,7 +107,8 @@ export default function LedgerDashboard({
 
   // Active Panel & Analytics States
   const [activePanel, setActivePanel] = useState<'LOG' | 'REPORTS' | 'HISTORY'>('LOG');
-  const [reportTimeframe, setReportTimeframe] = useState<'WEEK' | 'MONTH' | 'YEAR'>('MONTH');
+  const [reportTimeframe, setReportTimeframe] = useState<'WEEK' | 'MONTH' | 'ALL'>('WEEK');
+  const [isFullscreenLog, setIsFullscreenLog] = useState<boolean>(false);
   const [reportViewType, setReportViewType] = useState<'CATEGORY' | 'PARTY'>('CATEGORY');
 
   // Custom Deletion Permission Dialog States
@@ -123,11 +128,15 @@ export default function LedgerDashboard({
     };
   }, []);
 
-  // Format Date for Header
+  // Format Date for Header - DD/MM/YYYY Indian style
   const formattedToday = useMemo(() => {
     const d = new Date();
-    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric', weekday: 'long' };
-    return d.toLocaleDateString('en-IN', options);
+    const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${weekdays[d.getDay()]}, ${dd}/${mm}/${yyyy}`;
   }, []);
 
   // Get unique categories list from active visible transactions
@@ -152,17 +161,24 @@ export default function LedgerDashboard({
     return ['ALL', ...Array.from(catsSet)];
   }, [transactions]);
 
-  // Filter and compute transactions with smart multi-field search
+  // Filter and compute transactions with smart multi-field search (including DD/MM/YYYY date search)
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
       const searchLower = searchText.trim().toLowerCase();
+      const txDateObj = new Date(t.createdAt);
+      const dd = String(txDateObj.getDate()).padStart(2, '0');
+      const mm = String(txDateObj.getMonth() + 1).padStart(2, '0');
+      const yyyy = txDateObj.getFullYear();
+      const txDateFormattedStr = `${dd}/${mm}/${yyyy}`;
+
       const matchSearch =
         searchLower === '' ||
         (t.remarks || '').toLowerCase().includes(searchLower) ||
         (t.category || '').toLowerCase().includes(searchLower) ||
         (t.notes || '').toLowerCase().includes(searchLower) ||
         t.amount.toString().toLowerCase().includes(searchLower) ||
-        (t.paymentMethod || '').toLowerCase().includes(searchLower);
+        (t.paymentMethod || '').toLowerCase().includes(searchLower) ||
+        txDateFormattedStr.includes(searchLower);
       const matchMethod = selectedMethodFilter === 'ALL' || t.paymentMethod === selectedMethodFilter;
       const matchType = selectedTypeFilter === 'ALL' || t.type === selectedTypeFilter;
       const matchCategory = selectedCategoryFilter === 'ALL' || t.category === selectedCategoryFilter;
@@ -202,7 +218,12 @@ export default function LedgerDashboard({
       const yesterday = new Date();
       yesterday.setDate(today.getDate() - 1);
 
-      let key = dateVal.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      let key = (() => {
+        const dd = String(dateVal.getDate()).padStart(2, '0');
+        const mm = String(dateVal.getMonth() + 1).padStart(2, '0');
+        const yyyy = dateVal.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+      })();
       if (dateVal.toDateString() === today.toDateString()) {
         key = 'Today (आज)';
       } else if (dateVal.toDateString() === yesterday.toDateString()) {
@@ -391,80 +412,121 @@ export default function LedgerDashboard({
 
       {/* TRANSACTION LOGS SUB-VIEW */}
       {activePanel === 'LOG' && (
-        <>
-          {/* DASHBOARD SUMMARY PANEL (CLOSING BALANCE / JAMA / UDHAR) */}
-          <div className="px-5 pt-4 pb-1 space-y-3 shrink-0">
-            
-            {/* Prominent Live Closing Balance Card */}
-            <div className="bg-slate-900 text-white rounded-3xl p-5 shadow-xl relative overflow-hidden">
-              {/* Subtle Background Pattern */}
-              <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:12px_12px]"></div>
+        <div className={isFullscreenLog ? "fixed inset-0 z-[200] bg-[#faf9f6] h-screen flex flex-col overflow-hidden font-sans animate-fade-in" : "flex-1 flex flex-col overflow-hidden"}>
+          {/* Fullscreen Mode Top Bar header */}
+          {isFullscreenLog && (
+            <div className="bg-slate-900 text-white px-5 py-3 flex items-center justify-between shadow-md shrink-0">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-black uppercase tracking-wider">Today Rojmel Logs (आजचे व्यवहार - Fullscreen)</span>
+              </div>
+              <button
+                onClick={() => setIsFullscreenLog(false)}
+                className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                title="Exit Fullscreen"
+              >
+                <Minimize2 className="w-4 h-4 text-emerald-400" />
+                <span>Exit Fullscreen</span>
+              </button>
+            </div>
+          )}
+
+          {/* DASHBOARD SUMMARY PANEL (CLOSING BALANCE / JAMA / UDHAR) - Collapses when in Big Screen mode */}
+          {!isFullscreenLog && (
+            <div className="px-5 pt-4 pb-1 space-y-3 shrink-0">
               
-              <div className="relative">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                  Closing Balance / निव्वळ शिल्लक
-                </span>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-2xl font-bold text-emerald-400">₹</span>
-                  <span className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-white">
-                    {stats.closingBalance.toLocaleString('en-IN')}
-                  </span>
-                </div>
+              {/* Prominent Live Closing Balance Card */}
+              <div className="bg-slate-900 text-white rounded-3xl p-4 sm:p-5 shadow-xl relative overflow-hidden">
+                {/* Subtle Background Pattern */}
+                <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:12px_12px]"></div>
                 
-                <div className="flex items-center gap-1 text-[11px] mt-2.5 text-slate-300">
-                  <span className={`inline-block w-2.5 h-2.5 rounded-full ${stats.closingBalance >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
-                  <span>{stats.closingBalance >= 0 ? "Book Safe (नफ्यात)" : "Negative Status"}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Side-by-Side Subactions Total Cards */}
-            <div className="grid grid-cols-2 gap-3">
-              
-              {/* Total JAMA - Green */}
-              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 shadow-xs">
-                <div className="flex items-center gap-1 text-emerald-800 text-[10px] font-bold uppercase tracking-wider">
-                  <TrendingUp className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>Jama / जमा (In)</span>
-                </div>
-                <div className="text-lg sm:text-xl font-bold font-mono text-emerald-700 mt-1.5 truncate">
-                  ₹ {stats.jamaTotal.toLocaleString('en-IN')}
+                <div className="relative">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                    Closing Balance / निव्वळ शिल्लक
+                  </span>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-2xl font-bold text-emerald-400">₹</span>
+                    <span className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-white">
+                      {stats.closingBalance.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-1 text-[11px] mt-2 text-slate-300">
+                    <span className={`inline-block w-2.5 h-2.5 rounded-full ${stats.closingBalance >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
+                    <span>{stats.closingBalance >= 0 ? "Book Safe (नफ्यात)" : "Negative Status"}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Total UDHAR - Red */}
-              <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 shadow-xs">
-                <div className="flex items-center gap-1 text-rose-800 text-[10px] font-bold uppercase tracking-wider">
-                  <TrendingDown className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                  <span>Udhar / उधार (Out)</span>
+              {/* Side-by-Side Subactions Total Cards */}
+              <div className="grid grid-cols-2 gap-3">
+                
+                {/* Total JAMA - Green */}
+                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3.5 sm:p-4 shadow-xs">
+                  <div className="flex items-center gap-1 text-emerald-800 text-[10px] font-bold uppercase tracking-wider">
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Jama (In)</span>
+                  </div>
+                  <div className="text-base sm:text-xl font-bold font-mono text-emerald-700 mt-1 truncate">
+                    ₹ {stats.jamaTotal.toLocaleString('en-IN')}
+                  </div>
                 </div>
-                <div className="text-lg sm:text-xl font-bold font-mono text-rose-700 mt-1.5 truncate">
-                  ₹ {stats.udharTotal.toLocaleString('en-IN')}
+
+                {/* Total UDHAR - Red */}
+                <div className="bg-rose-50 border border-rose-100 rounded-2xl p-3.5 sm:p-4 shadow-xs">
+                  <div className="flex items-center gap-1 text-rose-800 text-[10px] font-bold uppercase tracking-wider">
+                    <TrendingDown className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                    <span>Udhar (Out)</span>
+                  </div>
+                  <div className="text-base sm:text-xl font-bold font-mono text-rose-700 mt-1 truncate">
+                    ₹ {stats.udharTotal.toLocaleString('en-IN')}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* FILTER CONTROLS */}
           <div className="px-5 py-3 shrink-0 bg-[#faf9f6] z-10 border-b border-gray-200/50 space-y-2">
-            {/* Remarks / Party Name Search Input */}
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search parties, categories, amounts or remarks..."
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-                className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 pl-9 pr-8 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-emerald-500 shadow-xs"
-              />
-              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-3" />
-              {searchText && (
-                <button
-                  onClick={() => setSearchText('')}
-                  className="absolute right-2.5 top-2.5 p-0.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+            {/* Remarks / Party Name Search Input + Fullscreen Toggle Icon */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="Search parties, categories, amounts or remarks..."
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 pl-9 pr-8 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-emerald-500 shadow-xs"
+                  id="today-search-input"
+                />
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-3" />
+                {searchText && (
+                  <button
+                    onClick={() => setSearchText('')}
+                    className="absolute right-2.5 top-2.5 p-0.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* ^ Fullscreen Toggle Button (Icon Only) */}
+              <button
+                onClick={() => setIsFullscreenLog(!isFullscreenLog)}
+                title={isFullscreenLog ? "Show Balance Cards" : "Fullscreen Mode (^)"}
+                className={`p-2 rounded-xl font-black transition cursor-pointer border shadow-xs shrink-0 flex items-center justify-center ${
+                  isFullscreenLog
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800'
+                }`}
+                id="today-pullup-bigscreen-btn"
+              >
+                {isFullscreenLog ? (
+                  <ChevronDown className="w-4 h-4 text-white" />
+                ) : (
+                  <ChevronUp className="w-4 h-4 text-white" />
+                )}
+              </button>
             </div>
 
             {/* Filter Badge indicator */}
@@ -707,7 +769,7 @@ export default function LedgerDashboard({
               <span>Quick Entry (नवीन जमा/उधार)</span>
             </button>
           </div>
-        </>
+        </div>
       )}
 
       {/* HISTORICAL REGISTERS & ADVANCED AUDITING SCREEN */}
