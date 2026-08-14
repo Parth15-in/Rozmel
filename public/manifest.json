@@ -22,21 +22,15 @@
   "icons": [
     {
       "src": "/icon.png",
-      "sizes": "192x192",
+      "sizes": "1254x1254",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon.png",
-      "sizes": "192x192",
+      "src": "/icon-maskable.png",
+      "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "maskable"
-    },
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
     }
   ],
   "shortcuts": [
