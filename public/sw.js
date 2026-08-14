@@ -1,8 +1,10 @@
-const CACHE_NAME = 'ledger-rojmel-cache-v1';
+const CACHE_NAME = 'ledger-rojmel-cache-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/icon.png',
+  '/icon-maskable.png',
   '/icon.svg',
 ];
 
