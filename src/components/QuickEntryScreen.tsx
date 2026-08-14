@@ -522,7 +522,8 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
 
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  
+  // Track which bulk row has its suggestions open (by row id, or null)
+  const [bulkSuggestionsRowId, setBulkSuggestionsRowId] = useState<string | null>(null);
 
   const filteredSuggestions = useMemo(() => {
     if (!remarks.trim()) {
@@ -533,6 +534,23 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
       item.toLowerCase().includes(query)
     ).slice(0, 10);
   }, [savedPartiesAndItems, remarks]);
+
+  // Compute bulk-row suggestions: filter by row type and current input
+  const getBulkRowSuggestions = (rowType: TransactionType, rowRemarks: string) => {
+    const frequencyMap: Record<string, number> = {};
+    transactions.forEach((tx) => {
+      if (tx.type === rowType && tx.remarks && tx.remarks.trim().length > 0) {
+        const item = tx.remarks.trim();
+        frequencyMap[item] = (frequencyMap[item] || 0) + 1;
+      }
+    });
+    const sorted = Object.entries(frequencyMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([item]) => item);
+    if (!rowRemarks.trim()) return sorted.slice(0, 10);
+    const q = rowRemarks.toLowerCase().trim();
+    return sorted.filter((item) => item.toLowerCase().includes(q)).slice(0, 10);
+  };
 
   if (isBulkSavedSuccessfully && bulkSavedReceipt) {
     const netSum = bulkSavedReceipt.totalJama - bulkSavedReceipt.totalUdhar;
@@ -939,15 +957,52 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
                             className="w-full bg-slate-50 border border-gray-200 rounded-xl p-2 text-xs font-black font-mono text-gray-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
                           />
                         </div>
-                        <div className="col-span-7">
+                        <div className="col-span-7 relative">
                           <label className="text-[8px] font-black uppercase text-gray-400 block mb-1">Remarks / Party Name</label>
                           <input
                             type="text"
                             placeholder="e.g. Cash sale, Repairs..."
                             value={row.remarks}
-                            onChange={(e) => handleUpdateBulkRow(row.id, 'remarks', e.target.value)}
+                            onChange={(e) => {
+                              handleUpdateBulkRow(row.id, 'remarks', e.target.value);
+                              setBulkSuggestionsRowId(row.id);
+                            }}
+                            onFocus={() => setBulkSuggestionsRowId(row.id)}
                             className="w-full bg-slate-50 border border-gray-200 rounded-xl p-2 text-xs font-bold text-gray-800 focus:outline-none focus:border-emerald-600 focus:bg-white"
                           />
+                          {/* Autocomplete Dropdown */}
+                          {bulkSuggestionsRowId === row.id && (() => {
+                            const suggestions = getBulkRowSuggestions(row.type, row.remarks);
+                            return suggestions.length > 0 ? (
+                              <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-emerald-200 rounded-xl shadow-xl overflow-hidden z-40">
+                                <div className="bg-emerald-50/50 px-3 py-1.5 flex justify-between items-center border-b border-emerald-100">
+                                  <span className="text-[9px] font-black uppercase text-emerald-800">Recent Parties / पूर्वीचे व्यवहार</span>
+                                  <button
+                                    type="button"
+                                    onMouseDown={(e) => { e.preventDefault(); setBulkSuggestionsRowId(null); }}
+                                    className="text-[9px] text-emerald-600 font-extrabold hover:underline px-1"
+                                  >
+                                    Close
+                                  </button>
+                                </div>
+                                {suggestions.map((item, idx) => (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      handleUpdateBulkRow(row.id, 'remarks', item);
+                                      setBulkSuggestionsRowId(null);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-[10px] text-gray-700 hover:bg-emerald-50 active:bg-emerald-100 font-bold transition cursor-pointer flex justify-between items-center"
+                                  >
+                                    <span>{item}</span>
+                                    <span className="text-[8px] bg-slate-100 text-gray-500 px-1.5 py-0.5 rounded font-mono uppercase">SELECT</span>
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null;
+                          })()}
                         </div>
                       </div>
 
