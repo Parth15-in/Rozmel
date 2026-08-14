@@ -1001,6 +1001,20 @@ export default function QuickEntryScreen({ onSave, onClose, editTransaction, tra
                         </div>
                       </div>
 
+                      {/* Additional Notes */}
+                      <div className="pt-1">
+                        <label className="text-[8px] font-black uppercase text-gray-400 flex items-center gap-1 mb-1">
+                          <MessageSquare className="w-3 h-3" /> Additional Notes (Optional)
+                        </label>
+                        <textarea
+                          rows={2}
+                          placeholder="Extra details, references... (टीप / अधिक माहिती)"
+                          value={row.notes || ''}
+                          onChange={(e) => handleUpdateBulkRow(row.id, 'notes', e.target.value)}
+                          className="w-full bg-slate-50 border border-gray-200 rounded-xl p-2 text-[10px] font-semibold text-gray-700 placeholder-gray-400 focus:outline-none focus:border-emerald-500 focus:bg-white resize-none transition leading-relaxed"
+                        />
+                      </div>
+
                     </div>
 
                   </div>
